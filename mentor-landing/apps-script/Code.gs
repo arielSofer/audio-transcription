@@ -28,14 +28,25 @@ function doPost(e) {
     const d = JSON.parse(e.postData.contents);
     if (d.website) return json_({ ok: true }); // honeypot – בוטים
 
-    const slot = bookSlot_(d);
-    const score = score_(d);
-    const row = [
-      new Date(), d.name, "'" + d.phone, d.email, d.experience, d.status, d.failed,
-      d.backtest, d.journal, [].concat(d.mistakes || []).join(', '), d.blocker, d.commitment,
-      d.goal, slot, score
-    ];
-    getSheet_().appendRow(row);
+    // נעילה: שני אנשים שלוחצים "שלח" באותו רגע על אותה שעה לא יקבלו אותה שניהם
+    const lock = LockService.getScriptLock();
+    lock.waitLock(25000);
+    let slot, score, row;
+    try {
+      const b = bookSlot_(d);
+      // גרסה חדשה של האתר (v>=2) מקבלת הודעה לבחור שעה אחרת; גרסה ישנה – הליד נשמר ומסומן לתיאום מחדש
+      if (!b.ok && d.v >= 2) return json_({ ok: false, error: 'slot_taken' });
+      slot = b.label;
+      score = score_(d);
+      row = [
+        new Date(), d.name, "'" + d.phone, d.email, d.experience, d.status, d.failed,
+        d.backtest, d.journal, [].concat(d.mistakes || []).join(', '), d.blocker, d.commitment,
+        d.goal, slot, score
+      ];
+      getSheet_().appendRow(row);
+    } finally {
+      lock.releaseLock();
+    }
 
     MailApp.sendEmail({
       to: NOTIFY_EMAIL,
@@ -89,16 +100,16 @@ function getDays_() {
   return days;
 }
 
-// חוסם את המועד ביומן (ללא הזמנה לליד). אם המועד נתפס בינתיים – הליד נשמר בכל זאת.
+// חוסם את המועד ביומן (ללא הזמנה לליד). מחזיר ok=false אם המועד כבר תפוס.
 function bookSlot_(d) {
-  if (!d.slotDate || !d.slotTime) return '';
+  if (!d.slotDate || !d.slotTime) return { ok: true, label: '' };
   const label = d.slotDate + ' ' + d.slotTime;
   const s = parseSlot_(d.slotDate, d.slotTime);
-  if (overlaps_(busy_(s.start, s.end), s.start, s.end)) return label + ' (היה תפוס – לתאם מחדש)';
+  if (overlaps_(busy_(s.start, s.end), s.start, s.end)) return { ok: false, label: label + ' (היה תפוס – לתאם מחדש)' };
   CalendarApp.getDefaultCalendar().createEvent('[ממתין לאישור] שיחה עם ' + d.name, s.start, s.end, {
     description: 'טלפון: ' + d.phone + '\nאימייל: ' + d.email
   });
-  return label;
+  return { ok: true, label: label };
 }
 
 // ציון סינון 0–6: בקטסט, יומן, מחויבות, ניסיון, תשובות פתוחות לא שטחיות
