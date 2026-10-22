@@ -115,3 +115,10 @@ function score_(d) {
 function json_(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
+
+// להריץ פעם אחת מהעורך (בחר setup ← הפעלה): מאשר הרשאות ליומן, לגיליון ולמייל ושולח מייל בדיקה.
+function setup() {
+  getSheet_();
+  getDays_();
+  MailApp.sendEmail(NOTIFY_EMAIL, 'בדיקת חיבור – ליווי מנטלי', 'הסקריפט מחובר לגיליון, ליומן ולמייל ✅');
+}
