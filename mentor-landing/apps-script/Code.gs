@@ -2,7 +2,7 @@
 // כל הרשמה: נשמרת כשורה בגיליון + נשלח לך מייל עדכון.
 
 const NOTIFY_EMAIL = 'arielvdcr@gmail.com'; // לשנות אם רוצים מייל אחר
-const SHEET_NAME = 'לידים';
+const SHEET_ID = '1w9C3RFT2SLzKdK0794GD2ANGlmKRP6ANid0C7dE4bxw'; // הגיליון הפרטי שלך (כבר נוצר)
 
 const HEADERS = [
   'תאריך', 'שם', 'טלפון', 'אימייל', 'ניסיון בשוק', 'מצב נוכחי', 'ניסיונות שכשלו',
@@ -36,14 +36,10 @@ function doPost(e) {
 }
 
 function getSheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) {
-    sheet = ss.insertSheet(SHEET_NAME);
-    sheet.appendRow(HEADERS);
-    sheet.setFrozenRows(1);
-    sheet.setRightToLeft(true);
-  }
+  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheets()[0];
+  if (sheet.getLastRow() === 0) sheet.appendRow(HEADERS);
+  sheet.setFrozenRows(1);
+  sheet.setRightToLeft(true);
   return sheet;
 }
 
