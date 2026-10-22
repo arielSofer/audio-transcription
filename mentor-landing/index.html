@@ -153,7 +153,7 @@ let pick = { date: '', time: '' }, calDays = null;
 // ללא חיבור לשרת (או בכשל) – ברירת מחדל: כל יום חוץ משישי, 19:30-21:30, רבע שעה, הכל פנוי
 function localDays() {
   const out = [], base = new Date();
-  for (let i = 1; out.length < 10; i++) {
+  for (let i = 1; out.length < 12; i++) {
     const d = new Date(base.getTime() + i * 86400000);
     if (d.getDay() === 5) continue; // בלי שישי
     const slots = [];
@@ -167,7 +167,7 @@ let daysPromise = null;
 // נטען ברקע כבר בכניסה לדף, כדי שיהיה מוכן כשמגיעים לשלב הקביעה
 function fetchDays() {
   if (!daysPromise) daysPromise = (async () => {
-    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 15000);
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 45000);
     try {
       if (ENDPOINT.includes('PASTE_')) throw 0;
       const r = await fetch(ENDPOINT + '?action=slots', { signal: ctl.signal });
@@ -180,14 +180,24 @@ function fetchDays() {
   return daysPromise;
 }
 
+// מציג מיד ימים ושעות (ברירת מחדל), ואז מעדכן לפי היומן החי כשהוא מגיע (ההתחלה הקרה של Apps Script יכולה לקחת עד חצי דקה)
 async function loadDays() {
   if (calDays) return;
   const hint = document.getElementById('slotHint');
-  hint.textContent = 'טוען מועדים פנויים...';
-  const res = await fetchDays();
-  calDays = res.days;
-  hint.textContent = res.live ? '' : 'לא הצלחנו לטעון זמינות עדכנית. בחר מועד מועדף ואאשר מולך.';
+  calDays = localDays();
   renderDates();
+  hint.textContent = 'מעדכן זמינות לפי היומן...';
+  const res = await fetchDays();
+  if (res.live) {
+    calDays = res.days;
+    const day = calDays.find(d => d.date === pick.date);
+    if (!day || !(day.slots.find(x => x.t === pick.time) || {}).free) pick.time = '';
+    renderDates();
+    if (day) renderSlots(day);
+    hint.textContent = '';
+  } else {
+    hint.textContent = 'לא הצלחנו לטעון זמינות עדכנית. בחר מועד מועדף ואאשר מולך.';
+  }
 }
 
 function renderDates() {
