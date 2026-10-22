@@ -22,6 +22,13 @@
   .count{color:var(--muted);font-size:13px;margin-bottom:18px}
   .step{display:none}.step.active{display:block}
   .q{font-size:20px;font-weight:600;margin:0 0 14px}
+  .q.sub{font-size:16px;margin:14px 0 8px}
+  .dates{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:6px}
+  .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px}
+  .pick{padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:transparent;color:var(--text);min-height:44px;flex:none;text-align:center}
+  .pick small{display:block;color:var(--muted);font-size:12px}
+  .pick.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+  .pick:disabled{opacity:.35;cursor:not-allowed;text-decoration:line-through}
   .hint{color:var(--muted);font-size:14px;margin:-8px 0 14px}
   .opts{display:grid;gap:8px}
   .opt{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;cursor:pointer;min-height:48px}
@@ -98,6 +105,13 @@
       <input type="tel" name="phone" placeholder="טלפון (וואטסאפ)" autocomplete="tel" inputmode="tel" dir="ltr" style="text-align:right">
       <input type="email" name="email" placeholder="אימייל" autocomplete="email" dir="ltr" style="text-align:right">
     </div>
+    <div class="step" data-name="slot" data-type="slot">
+      <p class="q">מתי נוח לך לשיחה קצרה של רבע שעה?</p>
+      <p class="hint">בחר תאריך ואז שעה. אחזור אליך לאישור.</p>
+      <div class="dates" id="dates"></div>
+      <div class="slots" id="slots"></div>
+      <p class="hint" id="slotHint"></p>
+    </div>
 
     <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
     <p class="err" id="err" role="alert"></p>
@@ -108,7 +122,7 @@
 
     <div class="done" id="done" hidden>
       <h2>תודה, קיבלתי! ✅</h2>
-      <p>אעבור על השאלון ואחזור אליך בוואטסאפ אם נמצא התאמה.</p>
+      <p>המועד שבחרת נשמר. אעבור על השאלון ואחזור אליך בוואטסאפ לאישור.</p>
     </div>
   </form>
   <footer>הפרטים נשמרים באופן פרטי ולא מועברים לצד שלישי.</footer>
@@ -134,6 +148,54 @@ const bar = document.getElementById('bar'), count = document.getElementById('cou
 const err = document.getElementById('err');
 const nextBtn = document.getElementById('next'), backBtn = document.getElementById('back');
 let cur = 0;
+let pick = { date: '', time: '' }, calDays = null;
+
+// ללא חיבור לשרת (או בכשל) – ברירת מחדל: כל יום, 19:30-21:30, רבע שעה, הכל פנוי
+function localDays() {
+  const out = [], base = new Date();
+  for (let i = 1; out.length < 10; i++) {
+    const d = new Date(base.getTime() + i * 86400000);
+    const slots = [];
+    for (let m = 19 * 60 + 30; m + 15 <= 21 * 60 + 30; m += 15) slots.push({ t: String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'), free: true });
+    out.push({ date: d.toLocaleDateString('sv-SE'), slots });
+  }
+  return out;
+}
+
+async function loadDays() {
+  if (calDays) return;
+  document.getElementById('slotHint').textContent = 'טוען מועדים פנויים...';
+  try {
+    if (ENDPOINT.includes('PASTE_')) throw 0;
+    const r = await fetch(ENDPOINT + '?action=slots');
+    calDays = (await r.json()).days;
+  } catch (e) { calDays = localDays(); }
+  document.getElementById('slotHint').textContent = '';
+  renderDates();
+}
+
+function renderDates() {
+  const box = document.getElementById('dates'); box.innerHTML = '';
+  calDays.forEach(day => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'pick';
+    const dt = new Date(day.date + 'T12:00:00');
+    b.innerHTML = dt.toLocaleDateString('he-IL', { weekday: 'long' }) + '<small>' + dt.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' }) + '</small>';
+    b.disabled = !day.slots.some(x => x.free);
+    b.onclick = () => { pick = { date: day.date, time: '' }; renderDates(); renderSlots(day); };
+    if (day.date === pick.date) b.classList.add('sel');
+    box.append(b);
+  });
+}
+
+function renderSlots(day) {
+  const box = document.getElementById('slots'); box.innerHTML = '';
+  day.slots.forEach(x => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'pick'; b.textContent = x.t; b.disabled = !x.free;
+    if (x.t === pick.time) b.classList.add('sel');
+    b.onclick = () => { pick.time = x.t; renderSlots(day); };
+    box.append(b);
+  });
+}
 
 steps.forEach(s => {
   const n = s.dataset.name, t = s.dataset.type;
@@ -151,9 +213,10 @@ function show(i) {
   cur = i; err.textContent = '';
   steps.forEach((s, k) => s.classList.toggle('active', k === i));
   bar.style.width = ((i + 1) / steps.length * 100) + '%';
-  count.textContent = 'שאלה ' + (i + 1) + ' מתוך ' + steps.length;
+  count.textContent = 'שלב ' + (i + 1) + ' מתוך ' + steps.length;
   backBtn.style.visibility = i === 0 ? 'hidden' : 'visible';
   nextBtn.textContent = i === steps.length - 1 ? 'שלח' : 'המשך';
+  if (steps[i].dataset.type === 'slot') loadDays();
 }
 
 function validate(s) {
@@ -166,6 +229,7 @@ function validate(s) {
     if (form.phone.value.replace(/\D/g, '').length < 9) return 'נא למלא מספר טלפון תקין';
     if (!/^\S+@\S+\.\S+$/.test(form.email.value.trim())) return 'נא למלא אימייל תקין';
   }
+  if (t === 'slot' && !(pick.date && pick.time)) return 'בחר תאריך ושעה לשיחה';
   return '';
 }
 
@@ -175,6 +239,7 @@ function collect() {
     d[n] = form.querySelector('input[name="' + n + '"]:checked').value;
   });
   d.mistakes = [...form.querySelectorAll('input[name="mistakes"]:checked')].map(i => i.value);
+  d.slotDate = pick.date; d.slotTime = pick.time;
   ['blocker','goal','name','phone','email','website'].forEach(n => d[n] = form[n].value.trim());
   return d;
 }
