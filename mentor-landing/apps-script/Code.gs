@@ -6,7 +6,7 @@ const NOTIFY_EMAIL = 'arielvdcr@gmail.com'; // לשנות אם רוצים מיי
 const SHEET_ID = '1w9C3RFT2SLzKdK0794GD2ANGlmKRP6ANid0C7dE4bxw'; // הגיליון הפרטי שלך (כבר נוצר)
 
 const TZ = 'Asia/Jerusalem';
-const WORK_DAYS = [0, 1, 2, 3, 4, 5, 6]; // כל יום (0=ראשון ... 6=שבת)
+const WORK_DAYS = [0, 1, 2, 3, 4, 6];    // בלי שישי (0=ראשון ... 5=שישי, 6=שבת)
 const START_MIN = 19 * 60 + 30;      // תחילת חלון השיחות: 19:30
 const END_MIN = 21 * 60 + 30;        // סוף חלון השיחות: 21:30
 const DURATION_MIN = 15;             // אורך שיחה: רבע שעה

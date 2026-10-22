@@ -150,11 +150,12 @@ const nextBtn = document.getElementById('next'), backBtn = document.getElementBy
 let cur = 0;
 let pick = { date: '', time: '' }, calDays = null;
 
-// ללא חיבור לשרת (או בכשל) – ברירת מחדל: כל יום, 19:30-21:30, רבע שעה, הכל פנוי
+// ללא חיבור לשרת (או בכשל) – ברירת מחדל: כל יום חוץ משישי, 19:30-21:30, רבע שעה, הכל פנוי
 function localDays() {
   const out = [], base = new Date();
   for (let i = 1; out.length < 10; i++) {
     const d = new Date(base.getTime() + i * 86400000);
+    if (d.getDay() === 5) continue; // בלי שישי
     const slots = [];
     for (let m = 19 * 60 + 30; m + 15 <= 21 * 60 + 30; m += 15) slots.push({ t: String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'), free: true });
     out.push({ date: d.toLocaleDateString('sv-SE'), slots });
