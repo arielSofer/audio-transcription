@@ -133,3 +133,29 @@ function setup() {
   getDays_();
   MailApp.sendEmail(NOTIFY_EMAIL, 'בדיקת חיבור – ליווי מנטלי', 'הסקריפט מחובר לגיליון, ליומן ולמייל ✅');
 }
+
+// שיבוץ מחדש אחרי תשובות במייל (22/10): מעדכן את "מועד שיחה" בגיליון ויוצר אירוע ביומן לכל אחד.
+// להריץ פעם אחת מהעורך (בחר reschedule ← הפעלה). אם שעה כבר תפוסה היא מדולגת ונרשמת ביומן הביצוע.
+function reschedule() {
+  const PLAN = [
+    { email: 'nehoraifahima212@gmail.com', date: '2026-10-26', time: '20:45' },
+    { email: 'eyalelkayam26@gmail.com',    date: '2026-10-27', time: '20:00' },
+    { email: 'gal24hasson@gmail.com',      date: '2026-10-27', time: '20:30' },
+    { email: 'edwardos2008@gmail.com',     date: '2026-10-28', time: '19:30' },
+    { email: 'liemyoktan@gmail.com',       date: '2026-10-29', time: '19:30' }
+  ];
+  const sheet = getSheet_(), rows = sheet.getDataRange().getValues(), cal = CalendarApp.getDefaultCalendar();
+  const col = function (h) { return HEADERS.indexOf(h); };
+  PLAN.forEach(function (p) {
+    let r = -1;
+    for (let i = rows.length - 1; i >= 1; i--) if (String(rows[i][col('אימייל')]).toLowerCase().trim() === p.email) { r = i; break; }
+    if (r < 0) { Logger.log('לא נמצא בגיליון: ' + p.email); return; }
+    const s = parseSlot_(p.date, p.time);
+    if (overlaps_(busy_(s.start, s.end), s.start, s.end)) { Logger.log('תפוס, מדלג: ' + p.email + ' ' + p.date + ' ' + p.time); return; }
+    cal.createEvent('[ממתין לאישור] שיחה עם ' + rows[r][col('שם')], s.start, s.end, {
+      description: 'טלפון: ' + String(rows[r][col('טלפון')]).replace(/^'/, '') + '\nאימייל: ' + p.email + '\n(שובץ מחדש אחרי תשובה במייל)'
+    });
+    sheet.getRange(r + 1, col('מועד שיחה') + 1).setValue(p.date + ' ' + p.time + ' (שובץ מחדש)');
+    Logger.log('שובץ: ' + rows[r][col('שם')] + ' ' + p.date + ' ' + p.time);
+  });
+}
