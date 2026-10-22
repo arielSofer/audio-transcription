@@ -163,15 +163,30 @@ function localDays() {
   return out;
 }
 
+let daysPromise = null;
+// נטען ברקע כבר בכניסה לדף, כדי שיהיה מוכן כשמגיעים לשלב הקביעה
+function fetchDays() {
+  if (!daysPromise) daysPromise = (async () => {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 15000);
+    try {
+      if (ENDPOINT.includes('PASTE_')) throw 0;
+      const r = await fetch(ENDPOINT + '?action=slots', { signal: ctl.signal });
+      const days = (await r.json()).days;
+      if (!Array.isArray(days) || !days.length) throw 0;
+      return { days, live: true };
+    } catch (e) { return { days: localDays(), live: false }; }
+    finally { clearTimeout(t); }
+  })();
+  return daysPromise;
+}
+
 async function loadDays() {
   if (calDays) return;
-  document.getElementById('slotHint').textContent = 'טוען מועדים פנויים...';
-  try {
-    if (ENDPOINT.includes('PASTE_')) throw 0;
-    const r = await fetch(ENDPOINT + '?action=slots');
-    calDays = (await r.json()).days;
-  } catch (e) { calDays = localDays(); }
-  document.getElementById('slotHint').textContent = '';
+  const hint = document.getElementById('slotHint');
+  hint.textContent = 'טוען מועדים פנויים...';
+  const res = await fetchDays();
+  calDays = res.days;
+  hint.textContent = res.live ? '' : 'לא הצלחנו לטעון זמינות עדכנית. בחר מועד מועדף ואאשר מולך.';
   renderDates();
 }
 
@@ -263,6 +278,7 @@ nextBtn.addEventListener('click', async () => {
   }
 });
 backBtn.addEventListener('click', () => cur > 0 && show(cur - 1));
+fetchDays();
 show(0);
 </script>
 </body>
