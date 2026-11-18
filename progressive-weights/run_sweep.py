@@ -105,8 +105,8 @@ def main():
 
     if a.suite == "sanity":
         todo = [c for c in suites([int(x) for x in a.bits.split(",")]) if c["suite"] == "sanity"]
-    elif a.suite == "main":
-        todo = [c for c in suites([int(x) for x in a.bits.split(",")]) if c["suite"] == "main"]
+    elif a.suite == "main":  # sanity reference points + the main sweep
+        todo = suites([int(x) for x in a.bits.split(",")])
     elif a.suite == "policy":
         todo = policy_suite(a.policy_bits, a.policy_frac)
     else:

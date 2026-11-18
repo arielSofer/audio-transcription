@@ -4,8 +4,8 @@ File layout (data file = tiles only; a sidecar .json describes it):
   for every tile-group (e.g. "L3.gu" = gate+up of layer 3), tiles 0..nt-1 are
   stored back to back, every tile padded to a multiple of 4096 bytes:
       tile = bit-packed low (8-bits) bits of the 8-bit codes of
-             [all output rows of the group] x [128 input channels]
-  so one tile == one large, aligned, sequential read (72KB .. 600KB here).
+             [all output rows of the group] x [`tile` input channels]
+  so one tile == one aligned, sequential read (a few KB .. hundreds of KB, depending on `tile`).
 
 base (kept in RAM) = top `bits` bits;  tile on disk = the remaining 8-bits bits.
 base + tile == the original 8-bit code, bit-exactly (see test_tilefile.py).
@@ -22,7 +22,6 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 
 ALIGN = 4096
-TILE = 128
 
 
 def _round_up(n, a=ALIGN):
@@ -43,16 +42,17 @@ def unpack_codes(buf, n: int, nbits: int) -> np.ndarray:
 
 
 def write_tilefile(path: str, groups, bits: int):
-    """groups: list of (name, [q tensors uint8 shaped [out, nt, TILE]]).  Returns index dict."""
+    """groups: list of (name, [uint8 code tensors shaped [out, n_tiles, tile]]).  Returns index dict."""
     nb = 8 - bits
     mask = (1 << nb) - 1
-    index = {"bits": bits, "tile": TILE, "align": ALIGN, "groups": {}}
+    tile = groups[0][1][0].shape[2]
+    index = {"bits": bits, "tile": tile, "align": ALIGN, "groups": {}}
     off = 0
     with open(path, "wb") as f:
         for name, qs in groups:
             nt = qs[0].shape[1]
             out_total = sum(q.shape[0] for q in qs)
-            raw = (out_total * TILE * nb + 7) // 8
+            raw = (out_total * tile * nb + 7) // 8
             stride = _round_up(raw)
             index["groups"][name] = dict(base=off, stride=stride, raw=raw, nt=nt, out_total=out_total)
             for t in range(nt):
@@ -106,7 +106,8 @@ class TileFile:
 
     def decode(self, name: str, blob: bytes) -> np.ndarray:
         g = self.index["groups"][name]
-        return unpack_codes(blob, g["out_total"] * TILE, self.nb).reshape(g["out_total"], TILE)
+        tile = self.index["tile"]
+        return unpack_codes(blob, g["out_total"] * tile, self.nb).reshape(g["out_total"], tile)
 
     def close(self):
         os.close(self.fd)

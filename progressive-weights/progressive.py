@@ -18,13 +18,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-TILE = 128  # input channels per tile == quantization group size
+GROUP = 128  # quantization group (one scale/min per output row per 128 input channels)
+TILE = 32    # input channels per refinement tile. Kept small so a 0.5B model has about as many
+#              tiles per matrix (28 for hidden=896) as a 70B model has with 256-channel tiles (32).
 
 
 # --------------------------------------------------------------------------
 # nested quantization: 8-bit grid, the top `bits` bits are the base
 # --------------------------------------------------------------------------
-def quant8(W: torch.Tensor, group: int = TILE):
+def quant8(W: torch.Tensor, group: int = GROUP):
     out, inn = W.shape
     ng = inn // group
     Wg = W.reshape(out, ng, group)
@@ -190,7 +192,7 @@ class ProgLinear(nn.Module):
         super().__init__()
         W = lin.weight.data.float()
         self.out_features, self.in_features = W.shape
-        assert self.in_features % TILE == 0, self.in_features
+        assert self.in_features % GROUP == 0 and GROUP % TILE == 0, self.in_features
         self.nt = self.in_features // TILE
         q, scale, mn = quant8(W)
         self.register_buffer("q", q)
@@ -201,6 +203,10 @@ class ProgLinear(nn.Module):
         self.group = group
         group.members.append(self)
         self.set_bits(ctl.bits)
+
+    def q_tiles(self):
+        """8-bit codes as [out, n_tiles, TILE] (a view; the on-disk tile unit)."""
+        return self.q.reshape(self.out_features, self.nt, TILE)
 
     def set_bits(self, bits: int):
         shape = (self.out_features, self.in_features)

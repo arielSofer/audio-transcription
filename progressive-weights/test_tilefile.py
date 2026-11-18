@@ -37,9 +37,10 @@ def main():
             names.append(f"L{i}.{kind}")
     path = os.path.join(a.workdir, f"tiles_b{a.bits}.bin")
     t0 = time.time()
-    idx = TF.write_tilefile(path, [(n, [m.q for m in g.members]) for n, g in zip(names, groups)], a.bits)
+    idx = TF.write_tilefile(path, [(n, [m.q_tiles() for m in g.members]) for n, g in zip(names, groups)], a.bits)
     print(f"wrote {idx['file_bytes']/1e6:.1f} MB in {time.time()-t0:.1f}s -> {path}")
 
+    assert idx['tile'] == P.TILE
     # ---- 1. bit-exactness: base bits | tile bits == original 8-bit code ----
     tf = TF.TileFile(path, direct=True)
     print("O_DIRECT in use:", tf.direct)
@@ -50,7 +51,7 @@ def main():
         g, name = groups[gi], names[gi]
         t = rng.randrange(g.nt)
         low = tf.decode(name, tf.read_tile(name, t))
-        q = np.concatenate([m.q[:, t, :].numpy() for m in g.members], axis=0)
+        q = np.concatenate([m.q_tiles()[:, t, :].numpy() for m in g.members], axis=0)
         base_code = (q >> nb) << nb
         assert np.array_equal(low, q & ((1 << nb) - 1)), (name, t)
         assert np.array_equal(base_code | low, q), (name, t)
@@ -72,18 +73,18 @@ def main():
     rnd = seq[:]
     rng.shuffle(rnd)
     for w in (1, 8, 32):
-        bench("sequential tiles (gate/up, ~600KB)", seq, w)
+        bench("sequential tiles (gate/up)", seq, w)
     for w in (1, 8, 32):
-        bench("random tiles (gate/up, ~600KB)", rnd, w)
+        bench("random tiles (gate/up)", rnd, w)
     small = [(n, t) for n in names if n.endswith(".o") for t in range(idx["groups"][n]["nt"])]
     rng.shuffle(small)
     for w in (1, 8, 32):
-        bench("random tiles (o_proj, ~57KB)", small, w)
+        bench("random tiles (o_proj)", small, w)
 
     # ---- 3. never-wait: deadline fetch against a throttled channel ----
     for bw_mb in (2000, 400, 100):
         df = TF.DeadlineFetcher(tf, workers=8, bandwidth=bw_mb * 1e6)
-        items = [("L5.gu", t) for t in range(idx["groups"]["L5.gu"]["nt"])]   # 7 tiles ~4.2MB
+        items = [("L5.gu", t) for t in range(idx["groups"]["L5.gu"]["nt"])]   # one layer's tiles
         want_bytes = sum(idx["groups"][n]["raw"] for n, _ in items)
         deadline_ms = 10.0
         t0 = time.perf_counter()
@@ -91,7 +92,7 @@ def main():
         arrived_in_time = len(got)
         time.sleep(want_bytes / (bw_mb * 1e6) + 0.05)   # let late tiles land
         late = sum(1 for k in items if k in df.landed) - arrived_in_time
-        print(f"channel {bw_mb:5d} MB/s, deadline {deadline_ms:.0f} ms, {len(items)} tiles ({want_bytes/1e6:.1f} MB): "
+        print(f"channel {bw_mb:5d} MB/s, deadline {deadline_ms:.0f} ms, {len(items)} tiles ({want_bytes/1e6:.2f} MB): "
               f"{arrived_in_time} on time, {late} landed late (cached for next token)")
         df.close()
     tf.close()
