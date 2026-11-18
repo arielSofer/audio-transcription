@@ -10,7 +10,7 @@
 
 ## 1. Quality vs. fraction of tiles refined per token
 
-`f` = fraction of the 128-channel input tiles that get their refinement bits for each token. dynamic = chosen per token by |x_tile|*||R_tile||, static = fixed set chosen on calibration text (needs that extra RAM permanently), random = control. `read %` = refinement bytes touched per token as % of ALL refinement bytes (before any cache).
+`f` = fraction of the input tiles that get their refinement bits for each token (tiles are 32 input channels wide). dynamic = chosen per token by |x_tile|*||R_tile||, static = fixed set chosen on calibration text (needs that extra RAM permanently), random = control. `read %` = refinement bytes touched per token as % of ALL refinement bytes (before any cache).
 
 ### base = 4 bit (RAM), refinement = 4 bit planes on SSD
 
@@ -108,3 +108,24 @@ overlap = fraction of a token's selected tiles that were also selected for the p
 | 2 | 0.70 | o | 0.86 | 0.95 |
 | 2 | 0.70 | gu | 0.78 | 0.87 |
 | 2 | 0.70 | down | 0.75 | 0.89 |
+
+## 3. Never-wait policy: bounded fetch budget + resident-tile cache
+
+budget = max NEW tiles fetched per token per group, as a fraction of the k wanted tiles (0 = never fetch, only reuse what is cached); cap = cache size in multiples of k (tiles kept resident). served = share of the wanted tiles that were usable.
+
+base = 4 bit, f = 0.1
+
+| cap | budget | perplexity | fetched MB/token | fetched % of refinement | served |
+|---|---|---|---|---|---|
+| 1.0 | 0.0 | 21.41 | 0.00 | 0.0 | 0.00 |
+| 1.0 | 0.25 | 19.34 | 4.96 | 2.8 | 0.79 |
+| 1.0 | 0.5 | 19.27 | 7.21 | 4.0 | 0.94 |
+| 1.0 | inf | 19.27 | 8.32 | 4.6 | 1.00 |
+| 2.0 | 0.0 | 21.41 | 0.00 | 0.0 | 0.00 |
+| 2.0 | 0.25 | 19.32 | 3.23 | 1.8 | 0.88 |
+| 2.0 | 0.5 | 19.26 | 4.66 | 2.6 | 0.97 |
+| 2.0 | inf | 19.27 | 5.18 | 2.9 | 1.00 |
+| inf | 0.0 | 21.41 | 0.00 | 0.0 | 0.00 |
+| inf | 0.25 | 19.29 | 0.29 | 0.2 | 0.99 |
+| inf | 0.5 | 19.27 | 0.30 | 0.2 | 1.00 |
+| inf | inf | 19.27 | 0.30 | 0.2 | 1.00 |
