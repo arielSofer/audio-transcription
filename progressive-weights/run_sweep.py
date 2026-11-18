@@ -49,8 +49,8 @@ def suites(bits_list):
 def policy_suite(bits, frac):
     out = []
     # unlimited cache and unlimited budget = the "ideal" numbers; then squeeze the budget
-    for cap in (None, 3.0, 1.5, 1.0):
-        for budget in (None, 4, 2, 1, 0):
+    for cap in (None, 2.0, 1.0):
+        for budget in (None, 0.5, 0.25, 0.0):
             out.append(dict(suite="policy", bits=bits, mode="policy", frac=frac, budget=budget, cap_mult=cap))
     return out
 

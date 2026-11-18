@@ -52,7 +52,7 @@ class Controller:
     def __init__(self):
         self.mode = "base"      # base | full | calib | dynamic | static | random | policy
         self.frac = 0.0         # fraction of tiles refined per token
-        self.budget = None      # policy: max NEW tiles fetched per token per group
+        self.budget = None      # policy: max NEW tiles fetched per token per group, as a fraction of k (None = unlimited)
         self.cap_mult = None    # policy: cache capacity in units of k (tiles kept resident)
         self.bits = 4
         self.reset_stats()
@@ -155,7 +155,7 @@ class TileGroup:
         Dn = D.numpy().astype(bool)
         nt = self.nt
         cap = None if ctl.cap_mult is None else int(round(ctl.cap_mult * k))
-        budget = ctl.budget
+        budget = None if ctl.budget is None else int(round(ctl.budget * k))
         used = np.zeros_like(Dn)
         in_cache = np.zeros(nt, bool)
         last = np.full(nt, -1, np.int64)

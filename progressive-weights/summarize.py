@@ -31,7 +31,7 @@ def main(path="results/results.jsonl", out="results/SUMMARY.md"):
         L.append(f"| base only, {r['bits']}-bit (no refinement) | {r['ppl']:.3f} |")
 
     L.append("\n## 1. Quality vs. fraction of tiles refined per token\n")
-    L.append("`f` = fraction of the 128-channel input tiles that get their refinement bits for each token. "
+    L.append("`f` = fraction of the input tiles that get their refinement bits for each token (tiles are 32 input channels wide). "
              "dynamic = chosen per token by |x_tile|*||R_tile||, static = fixed set chosen on calibration text "
              "(needs that extra RAM permanently), random = control. "
              "`read %` = refinement bytes touched per token as % of ALL refinement bytes (before any cache).\n")
@@ -67,7 +67,7 @@ def main(path="results/results.jsonl", out="results/SUMMARY.md"):
     pol = [r for r in rs if r["suite"] == "policy"]
     if pol:
         L.append("\n## 3. Never-wait policy: bounded fetch budget + resident-tile cache\n")
-        L.append("budget = max NEW tiles fetched per token per group (0 = never fetch, only reuse what is cached); "
+        L.append("budget = max NEW tiles fetched per token per group, as a fraction of the k wanted tiles (0 = never fetch, only reuse what is cached); "
                  "cap = cache size in multiples of k (tiles kept resident). served = share of the wanted tiles that were usable.\n")
         bits = pol[0]["bits"]
         total = PARAMS_BLOCKS * (8 - bits) / 8
