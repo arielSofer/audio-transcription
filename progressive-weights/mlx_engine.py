@@ -411,7 +411,44 @@ def teacher_forced(model, ids, stats: Stats, start=1):
     return nll, n, secs, stats.diff(snap)
 
 
+def bench_native(a):
+    """MLX's OWN quantization of the same block linears (fp16, 8-bit, 4-bit; group 128; embeddings untouched) on the
+    same tokens, so the progressive scheme can be compared with what MLX gives for free: quality, speed, resident RAM."""
+    import pathlib
+    import pyarrow.parquet as pq
+    from mlx.utils import tree_flatten
+    from mlx_lm.utils import load_model
+    from transformers import AutoTokenizer
+    dtype = getattr(mx, a.dtype)
+    tok = AutoTokenizer.from_pretrained(a.model)
+    text = "\n\n".join(pq.read_table(a.data).column("text").to_pylist())
+    allids = tok(text).input_ids
+    wins = [allids[i * 512:i * 512 + a.T] for i in range(a.windows)]
+    start = a.plan_len
+    out = []
+    for bits in (16, 8, 4):
+        model, _ = load_model(pathlib.Path(a.model), lazy=False)
+        model.set_dtype(dtype)
+        if bits < 16:
+            nn.quantize(model, group_size=GROUP, bits=bits, class_predicate=lambda path, m: isinstance(m, nn.Linear) and "layers." in path)
+        mx.eval(model.parameters())
+        resident = sum(v.nbytes for _, v in tree_flatten(model.parameters()))
+        stats = Stats()
+        tot, n, secs = 0.0, 0, 0.0
+        for w in wins:
+            nll, k, s, _ = teacher_forced(model, w, stats, start)
+            tot, n, secs = tot + nll, n + k, secs + s
+        r = dict(config=dict(mode="native", bits=bits), scored_from_token=start, ppl=math.exp(tot / n),
+                 ms_per_token=1000 * secs / n, tokens_per_s=n / secs, resident_gb=resident / 1e9)
+        out.append(r)
+        print(json.dumps({k: (round(v, 3) if isinstance(v, float) else v) for k, v in r.items()}), flush=True)
+        del model
+    json.dump(out, open(a.json, "w"), indent=2)
+
+
 def bench(a):
+    if a.suite == "native":
+        return bench_native(a)
     import pyarrow.parquet as pq
     from transformers import AutoTokenizer
     dtype = getattr(mx, a.dtype)
@@ -484,7 +521,7 @@ def main():
     ap.add_argument("--windows", type=int, default=2)
     ap.add_argument("--dtype", default="float32")
     ap.add_argument("--json", default="mlx_bench.json")
-    ap.add_argument("--suite", default="all", choices=["all", "plan", "drift"])
+    ap.add_argument("--suite", default="all", choices=["all", "plan", "drift", "native"])
     ap.add_argument("--drift-at", type=int, default=128)
     ap.add_argument("--only", default="", help="comma-separated modes to run, e.g. base,plan")
     ap.add_argument("--plan-len", type=int, default=64)
