@@ -35,10 +35,27 @@ assert "gpu" in str(mx.default_device()).lower(), "MLX is not using the GPU; thi
 EOF
 
 M="$WORK/models/qwen05"
-for f in config.json generation_config.json tokenizer.json tokenizer_config.json vocab.json merges.txt model.safetensors; do
-  # download to .part and rename only when complete; -C - resumes an interrupted download
-  [ -s "$M/$f" ] || { echo "== downloading $f"; curl -fL --retry 5 -C - -# -o "$M/$f.part" "https://huggingface.co/Qwen/Qwen2.5-0.5B/resolve/main/$f" && mv "$M/$f.part" "$M/$f"; }
-done
+# The model comes from Hugging Face's own downloader: it resumes interrupted transfers and retries by itself
+# (plain curl died with "HTTP/2 stream was not closed cleanly" on a slow connection).
+EXPECTED=988097824
+have=0; [ -f "$M/model.safetensors" ] && have=$(wc -c < "$M/model.safetensors" | tr -d ' ')
+if [ "$have" -lt "$EXPECTED" ]; then
+  rm -f "$M/model.safetensors"                    # a partial file left by an older run would look complete
+  echo "== downloading Qwen2.5-0.5B (about 1 GB; resumable, up to 8 attempts)"
+  ok=0
+  for i in 1 2 3 4 5 6 7 8; do
+    if "$PY" - "$M" <<'PYEOF'
+import sys
+from huggingface_hub import snapshot_download
+snapshot_download("Qwen/Qwen2.5-0.5B", local_dir=sys.argv[1],
+                  allow_patterns=["config.json", "generation_config.json", "tokenizer.json", "tokenizer_config.json",
+                                  "vocab.json", "merges.txt", "model.safetensors"])
+PYEOF
+    then ok=1; break; fi
+    echo "   attempt $i failed, resuming in 5 s"; sleep 5
+  done
+  [ "$ok" = 1 ] || { echo "!! download failed 8 times; check your connection and rerun (it resumes)"; exit 1; }
+fi
 [ -s "$WORK/data/wikitext2_test.parquet" ] || { curl -fL --retry 5 -C - -# -o "$WORK/data/wikitext2_test.parquet.part" \
   "https://huggingface.co/datasets/Salesforce/wikitext/resolve/main/wikitext-2-raw-v1/test-00000-of-00001.parquet" \
   && mv "$WORK/data/wikitext2_test.parquet.part" "$WORK/data/wikitext2_test.parquet"; }
