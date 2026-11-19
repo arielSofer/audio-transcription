@@ -8,6 +8,7 @@
 #   5. runs the contention benchmark: do SSD reads slow the GPU?   (needs a test file larger than your RAM)
 #
 # env: PYTHON=python3.12   (use it if your default python is too new for the mlx wheels)
+#      ENGINE_SUITE=plan ENGINE_T=256 SKIP_CONTENTION=1   (only the "decide once from the prompt" comparison, no 56 GB file)
 #      SIZE_GB=56           (contention test file; must exceed your RAM, needs SIZE_GB+15 GB free disk)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -66,14 +67,18 @@ if [ ! -s "$WORK/converted/members.npz" ]; then
   PYTHONDONTWRITEBYTECODE=1 "$PY" mlx_engine.py convert --model "$M" --out "$WORK/converted"
 fi
 
+SUITE="${ENGINE_SUITE:-all}"; ET="${ENGINE_T:-128}"
 echo
-echo "== REAL ENGINE (GPU base + tiles from the SSD), float16.  One line per configuration."
+echo "== REAL ENGINE (GPU base + tiles from the SSD), float16, suite=$SUITE, T=$ET.  One line per configuration."
 PYTHONDONTWRITEBYTECODE=1 "$PY" mlx_engine.py bench --model "$M" --out "$WORK/converted" \
-  --data "$WORK/data/wikitext2_test.parquet" --dtype float16 --json "$WORK/engine_mac.json" 2>&1 | grep -v -i warning | tee "$WORK/engine_mac.txt"
+  --data "$WORK/data/wikitext2_test.parquet" --dtype float16 --suite "$SUITE" --T "$ET" \
+  --json "$WORK/engine_mac_$SUITE.json" 2>&1 | grep -v -i warning | tee "$WORK/engine_mac_$SUITE.txt"
+
+if [ "${SKIP_CONTENTION:-0}" != "1" ]; then
+  echo
+  echo "== CONTENTION: SSD streaming vs GPU bandwidth   (creates a ${SIZE_GB} GB temp file, removed afterwards)"
+  PYTHONDONTWRITEBYTECODE=1 "$PY" mac_contention_bench.py --size-gb "$SIZE_GB" --json "$WORK/contention_mac.json" 2>&1 | tee "$WORK/contention_mac.txt"
+fi
 
 echo
-echo "== CONTENTION: SSD streaming vs GPU bandwidth   (creates a ${SIZE_GB} GB temp file, removed afterwards)"
-PYTHONDONTWRITEBYTECODE=1 "$PY" mac_contention_bench.py --size-gb "$SIZE_GB" --json "$WORK/contention_mac.json" 2>&1 | tee "$WORK/contention_mac.txt"
-
-echo
-echo "== done. Paste me the output above, or the files:  $WORK/engine_mac.txt  $WORK/contention_mac.txt"
+echo "== done. Paste me the output above, or the files in $WORK"

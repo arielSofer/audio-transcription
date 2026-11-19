@@ -142,11 +142,19 @@ class Settings:
     budget = None         # max NEW tiles fetched per token per group, as a fraction of k (None = unlimited)
     cap_mult = 2.0        # cache capacity in multiples of k (None = unlimited)
     deadline = None       # seconds to wait for tiles per group (None = wait for all requested)
+    plan_len = 64         # mode "plan": decide ONCE after this many prompt tokens, then no per-token decisions
+    dtype = None
 
 
 class Stats:
     def __init__(self):
         self.reset()
+
+    def snapshot(self):
+        return dict(vars(self))
+
+    def diff(self, snap):
+        return {k: getattr(self, k) - v for k, v in snap.items()}
 
     def reset(self):
         self.tokens = 0
@@ -222,13 +230,50 @@ class ProgGroup:
         self.nt = len(rn)
         self.store, self.st, self.stats = store, st, stats
         self.out_total = scale8.shape[0]
+        self.reset_sequence()
+
+    def reset_sequence(self):
+        self.plan = None
+        self.n_seen = 0
+        self.score_sum = np.zeros(self.nt)
         self._x = None
         self._y = None
+
+    def _decode(self, blobs):
+        m = len(blobs)
+        codes = np.empty((self.out_total, TILE * m), np.uint8)
+        for j, (t, blob) in enumerate(blobs):
+            a = np.frombuffer(blob, np.uint8).reshape(self.out_total, TILE // 2)
+            codes[:, j * TILE:(j + 1) * TILE:2] = a >> 4
+            codes[:, j * TILE + 1:(j + 1) * TILE:2] = a & 15
+        sc = np.repeat(self.scale8[:, [t * TILE // GROUP for t, _ in blobs]], TILE, axis=1)
+        return (codes.astype(np.float32) - 7.5) * sc            # residual R for those tiles [out_total, 32m]
+
+    def _build_plan(self):
+        """Mode "plan": pick the tiles with the highest MEAN score over the prompt, read them ONCE, keep the decoded
+        residual resident on the GPU. After this a token costs one gather + one small matmul: no sync, no I/O."""
+        st = self.st
+        k = min(self.nt, max(1, int(round(st.frac * self.nt))))
+        sel = np.argsort(-(self.score_sum / max(self.n_seen, 1)), kind="stable")[:k].tolist()
+        blobs = self.store.fetch(self.name, sel, k)
+        if not blobs:
+            self.plan = (None, None)
+            return
+        R = self._decode(blobs)
+        cols = np.concatenate([np.arange(t * TILE, (t + 1) * TILE) for t, _ in blobs]).astype(np.int32)
+        self.plan = (mx.array(np.ascontiguousarray(R.T)).astype(st.dtype), mx.array(cols))
 
     def refine(self, x):
         if self._x is x:
             return self._y
         st, stats = self.st, self.stats
+        if st.mode == "plan" and self.plan is None and self.n_seen >= st.plan_len:
+            self._build_plan()
+        if st.mode == "plan" and self.plan is not None:
+            R_t, cols = self.plan
+            y = None if R_t is None else mx.matmul(mx.take(x, cols, axis=-1), R_t)
+            self._x, self._y = x, y
+            return y
         t0 = time.perf_counter()
         xf = np.array(x.astype(mx.float32)).reshape(-1)             # GPU -> CPU sync
         xt = xf.reshape(self.nt, TILE)
@@ -236,18 +281,14 @@ class ProgGroup:
         k = self.nt if st.mode == "full" else min(self.nt, max(1, int(round(st.frac * self.nt))))
         wanted = np.argsort(-score, kind="stable")[:k].tolist()
         stats.t_select += time.perf_counter() - t0
+        if st.mode == "plan":                      # prompt phase: per-token selection, while collecting the mean score
+            self.score_sum += score
+            self.n_seen += 1
         blobs = self.store.fetch(self.name, wanted, k)
         t0 = time.perf_counter()
         y = None
         if blobs:
-            m = len(blobs)
-            codes = np.empty((self.out_total, TILE * m), np.uint8)
-            for j, (t, blob) in enumerate(blobs):
-                a = np.frombuffer(blob, np.uint8).reshape(self.out_total, TILE // 2)
-                codes[:, j * TILE:(j + 1) * TILE:2] = a >> 4
-                codes[:, j * TILE + 1:(j + 1) * TILE:2] = a & 15
-            sc = np.repeat(self.scale8[:, [t * TILE // GROUP for t, _ in blobs]], TILE, axis=1)
-            R = (codes.astype(np.float32) - 7.5) * sc
+            R = self._decode(blobs)
             xs = np.concatenate([xt[t] for t, _ in blobs])
             y = R @ xs
         stats.t_refine += time.perf_counter() - t0
@@ -272,7 +313,10 @@ class ProgLinear(nn.Module):
         if self._st.mode != "base":
             yr = self._group.refine(x)
             if yr is not None:
-                y = y + mx.array(yr[self._lo:self._hi]).astype(self._dtype)
+                if isinstance(yr, np.ndarray):
+                    y = y + mx.array(yr[self._lo:self._hi]).astype(self._dtype)
+                else:
+                    y = y + yr[..., self._lo:self._hi].astype(self._dtype)
         return y
 
 
@@ -282,6 +326,8 @@ def build_model(model_dir, out_dir, st: Settings, stats: Stats, dtype=mx.float32
     model.set_dtype(dtype)
     arrs = np.load(os.path.join(out_dir, "members.npz"))
     store = Store(os.path.join(out_dir, "tiles.bin"), st, stats)
+    st.dtype = dtype
+    store.groups = []
     for i, layer in enumerate(model.model.layers):
         a, m = layer.self_attn, layer.mlp
         p = f"model.layers.{i}."
@@ -293,6 +339,7 @@ def build_model(model_dir, out_dir, st: Settings, stats: Stats, dtype=mx.float32
             name = f"L{i}.{kind}"
             scale8 = np.concatenate([arrs[k + ".scale8"] for _, k in members], 0)
             g = ProgGroup(name, arrs[name + ".rn"], scale8, store, st, stats)
+            store.groups.append(g)
             lo = 0
             for attr, k in members:
                 n = arrs[k + ".scale8"].shape[0]
@@ -304,17 +351,22 @@ def build_model(model_dir, out_dir, st: Settings, stats: Stats, dtype=mx.float32
     return model, store
 
 
-def teacher_forced(model, ids, stats: Stats):
-    """Decode token by token with a KV cache; return the summed NLL of ids[1:] and the wall time."""
+def teacher_forced(model, ids, stats: Stats, start=1):
+    """Decode token by token with a KV cache. Only the tokens at positions >= start are scored and timed, and the
+    returned stats delta covers only them (the first `start` tokens are the 'prompt')."""
     from mlx_lm.models.cache import make_prompt_cache
     cache = make_prompt_cache(model)
-    nll, t0 = 0.0, time.perf_counter()
+    nll, n, secs, snap = 0.0, 0, 0.0, None
     for t in range(len(ids) - 1):
+        if t + 1 == start:
+            snap = stats.snapshot()
+        t0 = time.perf_counter()
         logits = model(mx.array([[ids[t]]]), cache=cache)[0, -1].astype(mx.float32)
-        lse = mx.logsumexp(logits)
-        nll += float((lse - logits[ids[t + 1]]).item())
-        stats.tokens += 1
-    return nll, time.perf_counter() - t0
+        v = float((mx.logsumexp(logits) - logits[ids[t + 1]]).item())
+        dt = time.perf_counter() - t0
+        if t + 1 >= start:
+            nll, n, secs = nll + v, n + 1, secs + dt
+    return nll, n, secs, stats.diff(snap)
 
 
 def bench(a):
@@ -327,33 +379,40 @@ def bench(a):
     text = "\n\n".join(pq.read_table(a.data).column("text").to_pylist())
     allids = tok(text).input_ids
     wins = [allids[i * 512:i * 512 + a.T] for i in range(a.windows)]     # same text positions as the simulation
-    configs = [dict(mode="base"), dict(mode="full", cap_mult=None),
-               dict(mode="dyn", frac=0.1, cap_mult=None),
-               dict(mode="dyn", frac=0.1, cap_mult=2.0),
-               dict(mode="dyn", frac=0.1, cap_mult=2.0, budget=0.5),
-               dict(mode="dyn", frac=0.1, cap_mult=2.0, budget=0.25),
-               dict(mode="dyn", frac=0.1, cap_mult=2.0, deadline=0.0005)]
+    if a.suite == "plan":
+        st.plan_len, start = a.plan_len, a.plan_len
+        configs = [dict(mode="base"), dict(mode="dyn", frac=0.1, cap_mult=2.0), dict(mode="plan", frac=0.1),
+                   dict(mode="dyn", frac=0.2, cap_mult=2.0), dict(mode="plan", frac=0.2)]
+    else:
+        start = 1
+        configs = [dict(mode="base"), dict(mode="full", cap_mult=None),
+                   dict(mode="dyn", frac=0.1, cap_mult=None),
+                   dict(mode="dyn", frac=0.1, cap_mult=2.0),
+                   dict(mode="dyn", frac=0.1, cap_mult=2.0, budget=0.5),
+                   dict(mode="dyn", frac=0.1, cap_mult=2.0, budget=0.25),
+                   dict(mode="dyn", frac=0.1, cap_mult=2.0, deadline=0.0005)]
     out = []
     for c in configs:
         st.mode, st.frac, st.budget, st.cap_mult, st.deadline = c["mode"], c.get("frac", 0.1), c.get("budget"), c.get("cap_mult", 2.0), c.get("deadline")
-        store.cache.clear()
-        stats.reset()
-        tot, n, secs = 0.0, 0, 0.0
+        tot, n, secs, agg = 0.0, 0, 0.0, collections.Counter()
         for w in wins:
-            store.cache.clear()                    # every window starts with a cold cache
-            nll, s = teacher_forced(model, w, stats)
-            tot, n, secs = tot + nll, n + len(w) - 1, secs + s
-        r = dict(config=c, ppl=math.exp(tot / n), ms_per_token=1000 * secs / n,
+            store.cache.clear()                    # every window starts with a cold cache and no plan
+            for g in store.groups:
+                g.reset_sequence()
+            nll, k, s, d = teacher_forced(model, w, stats, start)
+            tot, n, secs = tot + nll, n + k, secs + s
+            agg.update(d)
+        r = dict(config=c, scored_from_token=start, ppl=math.exp(tot / n), ms_per_token=1000 * secs / n,
                  tokens_per_s=n / secs,
-                 read_mb_per_token=stats.bytes_read / n / 1e6,
-                 io_wait_ms_per_token=1000 * stats.t_io_wait / n,
-                 select_ms_per_token=1000 * stats.t_select / n,
-                 refine_ms_per_token=1000 * stats.t_refine / n,
-                 cache_hit_rate=(stats.hits / stats.wanted) if stats.wanted else None,
-                 served_of_wanted=(stats.served / stats.wanted) if stats.wanted else None)
+                 read_mb_per_token=agg["bytes_read"] / n / 1e6,
+                 io_wait_ms_per_token=1000 * agg["t_io_wait"] / n,
+                 select_ms_per_token=1000 * agg["t_select"] / n,
+                 refine_ms_per_token=1000 * agg["t_refine"] / n,
+                 cache_hit_rate=(agg["hits"] / agg["wanted"]) if agg["wanted"] else None,
+                 served_of_wanted=(agg["served"] / agg["wanted"]) if agg["wanted"] else None)
         out.append(r)
         print(json.dumps({k: (round(v, 3) if isinstance(v, float) else v) for k, v in r.items()}), flush=True)
-    json.dump(out, open(a.json, "w"), indent=1)
+    json.dump(out, open(a.json, "w"), indent=2)
 
 
 def main():
@@ -366,6 +425,8 @@ def main():
     ap.add_argument("--windows", type=int, default=2)
     ap.add_argument("--dtype", default="float32")
     ap.add_argument("--json", default="mlx_bench.json")
+    ap.add_argument("--suite", default="all", choices=["all", "plan"])
+    ap.add_argument("--plan-len", type=int, default=64)
     a = ap.parse_args()
     if a.cmd == "convert":
         convert(a.model, a.out)
