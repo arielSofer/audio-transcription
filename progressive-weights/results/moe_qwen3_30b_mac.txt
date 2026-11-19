@@ -1,0 +1,22 @@
+Qwen3-30B-A3B-4bit (mlx-community), 48 MoE layers, 128 experts per layer, top-8, 2.65 MB per expert, 16.31 GB of experts.
+Apple Silicon Mac, 48 GB RAM, MLX on the GPU. Expert file read with F_NOCACHE (no OS page cache).
+WikiText-2 test, 2 windows of 256 tokens, token by token with a KV cache, scored from token 64. The expert cache starts cold in every window.
+Command: bash progressive-weights/run_moe_on_mac.sh   (commit 8a96c49)
+
+{"config": "resident (all experts in RAM)", "ppl": 14.1495, "ms_per_token": 28.6581, "tokens_per_s": 34.8941}
+{"config": "streamed, cache 0.12 of the experts per layer (48 MoE layers)", "ppl": 14.1495, "ms_per_token": 148.0362, "tokens_per_s": 6.7551, "hit_rate": 0.6436, "experts_read_per_token": 136.8594, "read_mb_per_token": 363.2532, "io_ms_per_token": 64.8876, "router_sync_ms_per_token": 54.3562, "stack_ms_per_token": 1.844}
+{"config": "streamed, cache 0.25 of the experts per layer (48 MoE layers)", "ppl": 14.1495, "ms_per_token": 72.3159, "tokens_per_s": 13.8282, "hit_rate": 0.8218, "experts_read_per_token": 68.4401, "read_mb_per_token": 181.6543, "io_ms_per_token": 29.7349, "router_sync_ms_per_token": 31.3429, "stack_ms_per_token": 1.0359}
+{"config": "streamed, cache 0.50 of the experts per layer (48 MoE layers)", "ppl": 14.1495, "ms_per_token": 41.6659, "tokens_per_s": 24.0004, "hit_rate": 0.9708, "experts_read_per_token": 11.2083, "read_mb_per_token": 29.7492, "io_ms_per_token": 6.2866, "router_sync_ms_per_token": 29.0004, "stack_ms_per_token": 1.0037}
+{"config": "streamed, cache 1.00 of the experts per layer (48 MoE layers)", "ppl": 14.1495, "ms_per_token": 36.3618, "tokens_per_s": 27.5014, "hit_rate": 0.9919, "experts_read_per_token": 3.1276, "read_mb_per_token": 8.3013, "io_ms_per_token": 2.2905, "router_sync_ms_per_token": 28.7206, "stack_ms_per_token": 0.9692}
+
+== EXPERT REUSE between tokens (from the recorded routing)
+2 sequences, 255 tokens per layer in the first, 48 MoE layers, 128 experts per layer, top-8
+ cache C    C/E | LRU hit rate  (after prompt) | prompt-fixed set
+       8   0.06 |        0.477           0.481 |            0.475
+      16   0.12 |        0.635           0.644 |            0.638
+      32   0.25 |        0.807           0.822 |            0.814
+      64   0.50 |        0.943           0.971 |            0.951
+      96   0.75 |        0.960           0.991 |            0.972
+     128   1.00 |        0.960           0.992 |            0.973
+
+hit rate = share of the (token, expert) activations whose expert was already in RAM; each miss costs one SSD read of one expert.

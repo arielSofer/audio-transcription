@@ -124,11 +124,11 @@ class Streamer:
 
     def reset(self):
         self.calls = self.hits = self.misses = self.bytes_read = 0
-        self.t_io = self.t_stack = self.t_sync = 0.0
+        self.t_io = self.t_stack = self.t_sync = self.t_make = 0.0
 
     def snapshot(self):
         return dict(calls=self.calls, hits=self.hits, misses=self.misses, bytes_read=self.bytes_read,
-                    t_io=self.t_io, t_stack=self.t_stack, t_sync=self.t_sync)
+                    t_io=self.t_io, t_stack=self.t_stack, t_sync=self.t_sync, t_make=self.t_make)
 
     def cap(self, path, k):
         E = self.index["groups"][path]["nt"]
@@ -155,9 +155,11 @@ class Streamer:
         futs = {e: self.pool.submit(self.tf.read_tile, path, e) for e in miss}
         blobs = {e: f.result() for e, f in futs.items()}
         self.t_io += time.perf_counter() - t0
-        for e, b in blobs.items():
+        t0 = time.perf_counter()
+        for e, b in blobs.items():                        # bytes -> MLX arrays (a copy per array): timed separately
             cache[e] = self._arrays(path, b)
             self.bytes_read += len(b)
+        self.t_make += time.perf_counter() - t0
         for e in experts:
             cache.move_to_end(e)
         cap = self.cap(path, len(experts))
@@ -265,6 +267,10 @@ def bench(a):
     streamer = Streamer(a.experts, cache_frac=a.cache_frac, workers=a.workers, trace=trace)
     nl = wrap_model(model, streamer)
     mx.eval(model.parameters())                            # lazy weights: only the non-expert ones are read now
+    try:
+        (mx.reset_peak_memory if hasattr(mx, "reset_peak_memory") else mx.metal.reset_peak_memory)()
+    except Exception:
+        pass
     tot, n, secs, agg = 0.0, 0, 0.0, collections.Counter()
     for w in wins:
         for c in streamer.cache.values():
@@ -279,7 +285,11 @@ def bench(a):
              hit_rate=agg["hits"] / max(agg["hits"] + agg["misses"], 1),
              experts_read_per_token=agg["misses"] / n, read_mb_per_token=agg["bytes_read"] / n / 1e6,
              io_ms_per_token=1000 * agg["t_io"] / n, router_sync_ms_per_token=1000 * agg["t_sync"] / n,
-             stack_ms_per_token=1000 * agg["t_stack"] / n)
+             stack_ms_per_token=1000 * agg["t_stack"] / n, make_arrays_ms_per_token=1000 * agg["t_make"] / n)
+    try:                                                   # peak MLX memory of this process (GB), when the build reports it
+        r["peak_mem_gb"] = (mx.get_peak_memory() if hasattr(mx, "get_peak_memory") else mx.metal.get_peak_memory()) / 1e9
+    except Exception:
+        pass
     out.append(r)
     print(json.dumps({k: (round(v, 4) if isinstance(v, float) else v) for k, v in r.items()}), flush=True)
     if a.json:
