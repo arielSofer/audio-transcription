@@ -1,0 +1,9 @@
+Real Mac run: MODEL=Qwen/Qwen2.5-3B ENGINE_SUITE=plan ENGINE_T=256 (GPU + SSD, float16, 4-bit base). 2 windows of 256 tokens, tokens 64..255 scored (384).
+Tile file 1387 MB. Shell prompt and paths removed.
+{"config": {"mode": "base"}, "ppl": 12.927, "ms_per_token": 16.267, "tokens_per_s": 61.474}
+{"config": {"mode": "dyn", "frac": 0.1, "cap_mult": 2.0}, "ppl": 11.587, "ms_per_token": 587.125, "tokens_per_s": 1.703, "read_mb_per_token": 36.371, "io_wait_ms_per_token": 41.049, "select_ms_per_token": 101.944, "refine_ms_per_token": 429.249, "cache_hit_rate": 0.547}
+{"config": {"mode": "plan", "frac": 0.1}, "ppl": 11.642, "ms_per_token": 28.735, "tokens_per_s": 34.8, "read_mb_per_token": 0.346, "plan_resident_mb": 528.722}
+{"config": {"mode": "plan", "frac": 0.1, "plan_quant": true}, "ppl": 11.645, "ms_per_token": 26.139, "tokens_per_s": 38.256, "read_mb_per_token": 0.346, "plan_resident_mb": 165.39}
+{"config": {"mode": "dyn", "frac": 0.2, "cap_mult": 2.0}, "ppl": 11.215, "ms_per_token": 1155.82, "tokens_per_s": 0.865, "read_mb_per_token": 64.103, "io_wait_ms_per_token": 56.74, "select_ms_per_token": 151.992, "refine_ms_per_token": 922.805, "cache_hit_rate": 0.682}
+{"config": {"mode": "plan", "frac": 0.2}, "ppl": 11.427, "ms_per_token": 48.329, "tokens_per_s": 20.691, "read_mb_per_token": 0.57, "plan_resident_mb": 1123.523}
+{"config": {"mode": "plan", "frac": 0.2, "plan_quant": true}, "ppl": 11.427, "ms_per_token": 34.7, "tokens_per_s": 28.819, "read_mb_per_token": 0.57, "plan_resident_mb": 351.443}
