@@ -1,0 +1,10 @@
+Real Mac runs: ENGINE_SUITE=native ENGINE_T=256 (MLX's own quantization of the block linears, group 128, embeddings untouched; float16; same tokens as the plan suite:
+2 windows of 256 tokens, tokens 64..255 scored). Shell prompt and paths removed.
+== Qwen2.5-0.5B
+{"config": {"mode": "native", "bits": 16}, "ppl": 19.006, "ms_per_token": 8.572, "tokens_per_s": 116.654, "resident_gb": 0.988}
+{"config": {"mode": "native", "bits": 8}, "ppl": 18.945, "ms_per_token": 8.05, "tokens_per_s": 124.224, "resident_gb": 0.641}
+{"config": {"mode": "native", "bits": 4}, "ppl": 22.523, "ms_per_token": 6.284, "tokens_per_s": 159.145, "resident_gb": 0.463}
+== Qwen2.5-3B
+{"config": {"mode": "native", "bits": 16}, "ppl": 10.87, "ms_per_token": 44.234, "tokens_per_s": 22.607, "resident_gb": 6.172}
+{"config": {"mode": "native", "bits": 8}, "ppl": 10.871, "ms_per_token": 27.966, "tokens_per_s": 35.757, "resident_gb": 3.484}
+{"config": {"mode": "native", "bits": 4}, "ppl": 12.493, "ms_per_token": 19.655, "tokens_per_s": 50.879, "resident_gb": 2.097}
