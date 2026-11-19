@@ -1,0 +1,6 @@
+{"config": {"mode": "base"}, "ppl": 24.450979878074055, "fetch_mb_per_token": 0.0}
+{"config": {"mode": "full"}, "ppl": 19.88121686461136, "fetch_mb_per_token": 0.0}
+{"config": {"mode": "dynamic", "frac": 0.1}, "ppl": 20.599981573764154, "fetch_mb_per_token": 0.0}
+{"config": {"mode": "policy", "frac": 0.1, "cap_mult": 2.0, "budget": null}, "ppl": 20.599981573764154, "fetch_mb_per_token": 5.252902299212598}
+{"config": {"mode": "policy", "frac": 0.1, "cap_mult": 2.0, "budget": 0.5}, "ppl": 20.544353445129364, "fetch_mb_per_token": 4.713246236220472}
+{"config": {"mode": "policy", "frac": 0.1, "cap_mult": 2.0, "budget": 0.25}, "ppl": 20.46517327278031, "fetch_mb_per_token": 3.2792188976377954}
