@@ -444,6 +444,8 @@ def bench(a):
                    dict(mode="dyn", frac=0.1, cap_mult=2.0, budget=0.5),
                    dict(mode="dyn", frac=0.1, cap_mult=2.0, budget=0.25),
                    dict(mode="dyn", frac=0.1, cap_mult=2.0, deadline=0.0005)]
+    if a.only:
+        configs = [c for c in configs if c["mode"] in a.only.split(",")]
     out = []
     for c in configs:
         st.mode, st.frac, st.budget, st.cap_mult, st.deadline = c["mode"], c.get("frac", 0.1), c.get("budget"), c.get("cap_mult", 2.0), c.get("deadline")
@@ -484,6 +486,7 @@ def main():
     ap.add_argument("--json", default="mlx_bench.json")
     ap.add_argument("--suite", default="all", choices=["all", "plan", "drift"])
     ap.add_argument("--drift-at", type=int, default=128)
+    ap.add_argument("--only", default="", help="comma-separated modes to run, e.g. base,plan")
     ap.add_argument("--plan-len", type=int, default=64)
     a = ap.parse_args()
     if a.cmd == "convert":
