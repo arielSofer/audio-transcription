@@ -1,0 +1,68 @@
+[
+ {
+  "mode": "base",
+  "frac": 0.0,
+  "ppl": 19.526949926413447,
+  "tokens": 3584
+ },
+ {
+  "mode": "dynamic",
+  "frac": 0.1,
+  "ppl": 17.874936222497624,
+  "tokens": 3584
+ },
+ {
+  "mode": "prevtok",
+  "frac": 0.1,
+  "ppl": 18.049049190258554,
+  "tokens": 3584
+ },
+ {
+  "mode": "prompt",
+  "frac": 0.1,
+  "ppl": 18.0751862356844,
+  "tokens": 3584
+ },
+ {
+  "mode": "static",
+  "frac": 0.1,
+  "ppl": 18.32455543091807,
+  "tokens": 3584
+ },
+ {
+  "mode": "random",
+  "frac": 0.1,
+  "ppl": 19.034300460657047,
+  "tokens": 3584
+ },
+ {
+  "mode": "dynamic",
+  "frac": 0.2,
+  "ppl": 17.690986768612124,
+  "tokens": 3584
+ },
+ {
+  "mode": "prevtok",
+  "frac": 0.2,
+  "ppl": 17.835431816196056,
+  "tokens": 3584
+ },
+ {
+  "mode": "prompt",
+  "frac": 0.2,
+  "ppl": 17.818201934123124,
+  "tokens": 3584
+ },
+ {
+  "mode": "static",
+  "frac": 0.2,
+  "ppl": 17.974621355414065,
+  "tokens": 3584
+ },
+ {
+  "mode": "random",
+  "frac": 0.2,
+  "ppl": 18.74259807678468,
+  "tokens": 3584
+ }
+]
