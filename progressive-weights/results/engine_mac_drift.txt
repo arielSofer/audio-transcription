@@ -1,0 +1,9 @@
+Real Mac run: ENGINE_SUITE=drift ENGINE_T=512 (Qwen2.5-0.5B, GPU + SSD, float16). 2 windows of 512 tokens: the first 128 tokens come from
+the start of the WikiText-2 test set and the remaining 384 from a different article far away (topic switch at token 128).
+Only the 384 post-switch tokens of each window are scored; plan-len 64. Shell prompt and paths removed.
+{"config": {"mode": "base"}, "ppl": 39.401, "ms_per_token": 4.615, "tokens_per_s": 216.672}
+{"config": {"mode": "dyn", "frac": 0.1, "cap_mult": 2.0}, "ppl": 35.758, "ms_per_token": 111.251, "tokens_per_s": 8.989, "read_mb_per_token": 5.331}
+{"config": {"mode": "plan", "frac": 0.1}, "ppl": 36.301, "ms_per_token": 7.27, "tokens_per_s": 137.558, "plan_resident_mb": 74.981}
+{"config": {"mode": "plan", "frac": 0.1, "plan_refresh": 32}, "ppl": 36.036, "ms_per_token": 10.602, "tokens_per_s": 94.318, "read_mb_per_token": 0.058, "plan_resident_mb": 74.981, "rebuild_ms_per_token": 5.34, "rebuilds_per_window": 1152.0}
+{"config": {"mode": "plan", "frac": 0.1, "plan_refresh": 64}, "ppl": 36.078, "ms_per_token": 8.862, "tokens_per_s": 112.845, "read_mb_per_token": 0.028, "plan_resident_mb": 74.981, "rebuild_ms_per_token": 3.411, "rebuilds_per_window": 576.0}
+{"config": {"mode": "plan", "frac": 0.1, "plan_refresh": 64, "plan_quant": true}, "ppl": 36.09, "ms_per_token": 8.266, "tokens_per_s": 120.979, "read_mb_per_token": 0.028, "plan_resident_mb": 23.482, "rebuild_ms_per_token": 2.776, "rebuilds_per_window": 576.0}
