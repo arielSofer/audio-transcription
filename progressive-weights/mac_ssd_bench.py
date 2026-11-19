@@ -19,6 +19,7 @@ import argparse
 import os
 import random
 import shutil
+import signal
 import sys
 import tempfile
 import time
@@ -121,11 +122,14 @@ def main():
     size = int(a.size_gb * 1e9) // 4096 * 4096
     folder = a.dir or tempfile.gettempdir()
     path = os.path.join(folder, "pw_bench.bin")
+    for sig in (signal.SIGTERM, signal.SIGHUP):      # closing the Terminal window must also clean up
+        signal.signal(sig, lambda *_: sys.exit(1))
     free = shutil.disk_usage(folder).free
     need = size + 15e9
     if free < need:
         sys.exit(f"Not enough free disk space in {folder}: {free/1e9:.0f} GB free, need {need/1e9:.0f} GB "
                  f"(--size-gb + 15 GB margin). Use a smaller --size-gb or --dir on a bigger disk.")
+    print(f"(if the run is ever force-killed, delete the test file by hand: {path})")
     print(f"platform={sys.platform}  file={path}  size={size/1e9:.1f} GB  free={free/1e9:.0f} GB  "
           f"(page cache bypass: {'F_NOCACHE' if IS_MAC else 'posix_fadvise'})")
     try:
