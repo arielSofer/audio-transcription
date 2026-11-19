@@ -269,6 +269,8 @@ def bench(a):
     for w in wins:
         for c in streamer.cache.values():
             c.clear()
+        if trace is not None:
+            trace.append(("__window__", []))                  # marks a new sequence (the cache starts cold)
         nll, k, s, d = decode_nll(model, w, a.start, streamer)
         tot, n, secs = tot + nll, n + k, secs + s
         agg.update(d)
