@@ -1,0 +1,111 @@
+{
+ "baseline_ar_nll": 3.028509199619293,
+ "configs": [
+  {
+   "split_layer": 14,
+   "refresh_every": 2,
+   "layer_evals_vs_full": 0.75,
+   "token_agreement_with_baseline": 0.71484375,
+   "ar_nll": 5.8856393694877625,
+   "ar_nll_baseline": 3.028509199619293
+  },
+  {
+   "split_layer": 14,
+   "refresh_every": 4,
+   "layer_evals_vs_full": 0.625,
+   "token_agreement_with_baseline": 0.640625,
+   "ar_nll": 5.4286749958992,
+   "ar_nll_baseline": 3.028509199619293
+  },
+  {
+   "split_layer": 21,
+   "refresh_every": 2,
+   "layer_evals_vs_full": 0.875,
+   "token_agreement_with_baseline": 0.75,
+   "ar_nll": 3.2618410736322403,
+   "ar_nll_baseline": 3.028509199619293
+  },
+  {
+   "split_layer": 21,
+   "refresh_every": 4,
+   "layer_evals_vs_full": 0.812,
+   "token_agreement_with_baseline": 0.6796875,
+   "ar_nll": 3.589800626039505,
+   "ar_nll_baseline": 3.028509199619293
+  }
+ ],
+ "stability": {
+  "1": {
+   "prompt": {
+    "rel_change": 0.029986858569706478,
+    "cosine": 0.9986822376648585
+   },
+   "still_masked": {
+    "rel_change": 0.1626998141097526,
+    "cosine": 0.9746475850542387
+   },
+   "newly_unmasked": {
+    "rel_change": 0.6764668007691701,
+    "cosine": 0.8092889691392581
+   },
+   "already_unmasked": {
+    "rel_change": 0.14888984716630407,
+    "cosine": 0.98098017594644
+   }
+  },
+  "2": {
+   "prompt": {
+    "rel_change": 0.0460784127187383,
+    "cosine": 0.997486240629639
+   },
+   "still_masked": {
+    "rel_change": 0.22534387578655565,
+    "cosine": 0.9588935199592795
+   },
+   "newly_unmasked": {
+    "rel_change": 0.7066171214516674,
+    "cosine": 0.7626120019704103
+   },
+   "already_unmasked": {
+    "rel_change": 0.21404436015738892,
+    "cosine": 0.9647768999521549
+   }
+  },
+  "4": {
+   "prompt": {
+    "rel_change": 0.07194994244491681,
+    "cosine": 0.9949432536959648
+   },
+   "still_masked": {
+    "rel_change": 0.3090489843549828,
+    "cosine": 0.9325778484344482
+   },
+   "newly_unmasked": {
+    "rel_change": 0.74175692598025,
+    "cosine": 0.7067141228665909
+   },
+   "already_unmasked": {
+    "rel_change": 0.31071039310402493,
+    "cosine": 0.9319592192769051
+   }
+  },
+  "8": {
+   "prompt": {
+    "rel_change": 0.11119407071964815,
+    "cosine": 0.9901934927329421
+   },
+   "still_masked": {
+    "rel_change": 0.4283964685164392,
+    "cosine": 0.8896369058638811
+   },
+   "newly_unmasked": {
+    "rel_change": 0.7822206802666187,
+    "cosine": 0.6255557755939662
+   },
+   "already_unmasked": {
+    "rel_change": 0.44303286474730286,
+    "cosine": 0.8685987080846514
+   }
+  }
+ }
+}

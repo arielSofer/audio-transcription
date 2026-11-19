@@ -1,0 +1,3 @@
+{"method": "rtn", "bits": 4, "group": 128, "nsamples": 0, "ppl": 21.503566198753994, "tokens": 4088, "quant_seconds": 2.8}
+{"method": "rtn", "bits": 3, "group": 128, "nsamples": 0, "ppl": 64.20121604702669, "tokens": 4088, "quant_seconds": 3.5}
+{"method": "rtn", "bits": 2, "group": 128, "nsamples": 0, "ppl": 323561.0543062934, "tokens": 4088, "quant_seconds": 2.9}

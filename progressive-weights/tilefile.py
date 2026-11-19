@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import mmap
 import os
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -88,6 +89,9 @@ class TileFile:
                 self.direct = False
         else:
             self.fd = os.open(path, flags)
+        if sys.platform == "darwin":                # macOS has no O_DIRECT: ask for uncached reads instead
+            import fcntl
+            fcntl.fcntl(self.fd, 48, 1)             # F_NOCACHE
         self._local = threading.local()
 
     def _buf(self, size):
@@ -99,10 +103,15 @@ class TileFile:
 
     def read_tile(self, name: str, t: int) -> bytes:
         g = self.index["groups"][name]
-        buf = self._buf(g["stride"])
-        n = os.preadv(self.fd, [memoryview(buf)[: g["stride"]]], g["base"] + t * g["stride"])
-        assert n == g["stride"], (n, g["stride"])
-        return bytes(buf[: g["raw"]])
+        off = g["base"] + t * g["stride"]
+        if hasattr(os, "preadv"):
+            buf = self._buf(g["stride"])
+            n = os.preadv(self.fd, [memoryview(buf)[: g["stride"]]], off)
+            assert n == g["stride"], (n, g["stride"])
+            return bytes(buf[: g["raw"]])
+        data = os.pread(self.fd, g["stride"], off)      # platforms without preadv (e.g. some macOS builds)
+        assert len(data) == g["stride"], (len(data), g["stride"])
+        return data[: g["raw"]]
 
     def decode(self, name: str, blob: bytes) -> np.ndarray:
         g = self.index["groups"][name]
