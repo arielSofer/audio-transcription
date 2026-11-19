@@ -36,10 +36,12 @@ EOF
 
 M="$WORK/models/qwen05"
 for f in config.json generation_config.json tokenizer.json tokenizer_config.json vocab.json merges.txt model.safetensors; do
-  [ -s "$M/$f" ] || { echo "== downloading $f"; curl -fL --retry 3 -o "$M/$f" "https://huggingface.co/Qwen/Qwen2.5-0.5B/resolve/main/$f"; }
+  # download to .part and rename only when complete; -C - resumes an interrupted download
+  [ -s "$M/$f" ] || { echo "== downloading $f"; curl -fL --retry 5 -C - -# -o "$M/$f.part" "https://huggingface.co/Qwen/Qwen2.5-0.5B/resolve/main/$f" && mv "$M/$f.part" "$M/$f"; }
 done
-[ -s "$WORK/data/wikitext2_test.parquet" ] || curl -fL --retry 3 -o "$WORK/data/wikitext2_test.parquet" \
-  "https://huggingface.co/datasets/Salesforce/wikitext/resolve/main/wikitext-2-raw-v1/test-00000-of-00001.parquet"
+[ -s "$WORK/data/wikitext2_test.parquet" ] || { curl -fL --retry 5 -C - -# -o "$WORK/data/wikitext2_test.parquet.part" \
+  "https://huggingface.co/datasets/Salesforce/wikitext/resolve/main/wikitext-2-raw-v1/test-00000-of-00001.parquet" \
+  && mv "$WORK/data/wikitext2_test.parquet.part" "$WORK/data/wikitext2_test.parquet"; }
 
 cd "$HERE"
 if [ ! -s "$WORK/converted/members.npz" ]; then
