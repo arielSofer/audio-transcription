@@ -143,6 +143,8 @@ class Settings:
     cap_mult = 2.0        # cache capacity in multiples of k (None = unlimited)
     deadline = None       # seconds to wait for tiles per group (None = wait for all requested)
     plan_len = 64         # mode "plan": decide ONCE after this many prompt tokens, then no per-token decisions
+    plan_refresh = 0      # mode "plan": rebuild the plan every N tokens from the last N tokens (0 = never)
+    plan_quant = False    # mode "plan": keep the chosen residual as 4-bit (mx.quantized_matmul) instead of fp16
     dtype = None
 
 
@@ -166,6 +168,8 @@ class Stats:
         self.t_select = 0.0
         self.t_io_wait = 0.0
         self.t_refine = 0.0
+        self.t_rebuild = 0.0
+        self.rebuilds = 0
 
 
 class Store:
@@ -236,42 +240,80 @@ class ProgGroup:
         self.plan = None
         self.n_seen = 0
         self.score_sum = np.zeros(self.nt)
+        self.acc = []
+        self.since = 0
+        self.plan_bytes = 0
         self._x = None
         self._y = None
 
-    def _decode(self, blobs):
+    def _codes(self, blobs):
         m = len(blobs)
         codes = np.empty((self.out_total, TILE * m), np.uint8)
         for j, (t, blob) in enumerate(blobs):
             a = np.frombuffer(blob, np.uint8).reshape(self.out_total, TILE // 2)
             codes[:, j * TILE:(j + 1) * TILE:2] = a >> 4
             codes[:, j * TILE + 1:(j + 1) * TILE:2] = a & 15
-        sc = np.repeat(self.scale8[:, [t * TILE // GROUP for t, _ in blobs]], TILE, axis=1)
-        return (codes.astype(np.float32) - 7.5) * sc            # residual R for those tiles [out_total, 32m]
+        sc = self.scale8[:, [t * TILE // GROUP for t, _ in blobs]]          # one scale per (row, tile)
+        return codes, sc
 
-    def _build_plan(self):
-        """Mode "plan": pick the tiles with the highest MEAN score over the prompt, read them ONCE, keep the decoded
-        residual resident on the GPU. After this a token costs one gather + one small matmul: no sync, no I/O."""
+    def _decode(self, blobs):
+        codes, sc = self._codes(blobs)
+        return (codes.astype(np.float32) - 7.5) * np.repeat(sc, TILE, axis=1)   # residual R [out_total, 32m]
+
+    def _xe(self, x):
+        """Per-tile L2 norm of the activation, computed on the GPU (no sync)."""
+        return mx.sqrt(mx.sum(mx.square(x.astype(mx.float32).reshape(self.nt, TILE)), axis=-1))
+
+    def _build_plan(self, score):
+        """Pick the k tiles with the highest score, read them (cache or SSD), keep the residual resident on the GPU.
+        After this a token costs one gather + one small matmul: no sync, no I/O, no decisions."""
         st = self.st
         k = min(self.nt, max(1, int(round(st.frac * self.nt))))
-        sel = np.argsort(-(self.score_sum / max(self.n_seen, 1)), kind="stable")[:k].tolist()
+        sel = np.argsort(-score, kind="stable")[:k].tolist()
         blobs = self.store.fetch(self.name, sel, k)
         if not blobs:
-            self.plan = (None, None)
+            self.plan, self.plan_bytes = ("empty",), 0
             return
-        R = self._decode(blobs)
-        cols = np.concatenate([np.arange(t * TILE, (t + 1) * TILE) for t, _ in blobs]).astype(np.int32)
-        self.plan = (mx.array(np.ascontiguousarray(R.T)).astype(st.dtype), mx.array(cols))
+        cols = mx.array(np.concatenate([np.arange(t * TILE, (t + 1) * TILE) for t, _ in blobs]).astype(np.int32))
+        if st.plan_quant:      # 4-bit codes stay packed; MLX's fused dequantize-matmul reads them (group = one tile)
+            codes, sc = self._codes(blobs)
+            s = mx.array(sc).astype(st.dtype)
+            wq, b = mx.array(pack4(codes)), -7.5 * s
+            self.plan = ("q4", wq, s, b, cols)
+            self.plan_bytes = wq.nbytes + s.nbytes + b.nbytes + cols.nbytes
+        else:
+            R_t = mx.array(np.ascontiguousarray(self._decode(blobs).T)).astype(st.dtype)
+            self.plan = ("fp16", R_t, cols)
+            self.plan_bytes = R_t.nbytes + cols.nbytes
+
+    def _plan_apply(self, x):
+        kind = self.plan[0]
+        if kind == "empty":
+            return None
+        if kind == "fp16":
+            _, R_t, cols = self.plan
+            return mx.matmul(mx.take(x, cols, axis=-1), R_t)
+        _, wq, s, b, cols = self.plan
+        return mx.quantized_matmul(mx.take(x, cols, axis=-1), wq, s, b, transpose=True, group_size=TILE, bits=4)
 
     def refine(self, x):
         if self._x is x:
             return self._y
         st, stats = self.st, self.stats
         if st.mode == "plan" and self.plan is None and self.n_seen >= st.plan_len:
-            self._build_plan()
+            self._build_plan(self.score_sum / max(self.n_seen, 1))
         if st.mode == "plan" and self.plan is not None:
-            R_t, cols = self.plan
-            y = None if R_t is None else mx.matmul(mx.take(x, cols, axis=-1), R_t)
+            if st.plan_refresh:
+                self.acc.append(self._xe(x))                 # stays on the GPU: no sync per token
+                self.since += 1
+                if self.since >= st.plan_refresh:             # one sync per refresh, then a new plan from the last N tokens
+                    t0 = time.perf_counter()
+                    xe = np.array(mx.mean(mx.stack(self.acc), axis=0))
+                    self._build_plan(xe * self.rn)
+                    stats.t_rebuild += time.perf_counter() - t0
+                    stats.rebuilds += 1
+                    self.acc, self.since = [], 0
+            y = self._plan_apply(x)
             self._x, self._y = x, y
             return y
         t0 = time.perf_counter()
@@ -379,10 +421,21 @@ def bench(a):
     text = "\n\n".join(pq.read_table(a.data).column("text").to_pylist())
     allids = tok(text).input_ids
     wins = [allids[i * 512:i * 512 + a.T] for i in range(a.windows)]     # same text positions as the simulation
-    if a.suite == "plan":
+    if a.suite == "drift":
+        # the text changes topic at token a.drift_at: first part from the start of the test set, rest from far away
+        OFF = 150000
+        wins = [allids[i * 512:i * 512 + a.drift_at] + allids[OFF + i * 512:OFF + i * 512 + a.T - a.drift_at]
+                for i in range(a.windows)]
+        st.plan_len, start = a.plan_len, a.drift_at
+        configs = [dict(mode="base"), dict(mode="dyn", frac=0.1, cap_mult=2.0), dict(mode="plan", frac=0.1),
+                   dict(mode="plan", frac=0.1, plan_refresh=32), dict(mode="plan", frac=0.1, plan_refresh=64),
+                   dict(mode="plan", frac=0.1, plan_refresh=64, plan_quant=True)]
+    elif a.suite == "plan":
         st.plan_len, start = a.plan_len, a.plan_len
         configs = [dict(mode="base"), dict(mode="dyn", frac=0.1, cap_mult=2.0), dict(mode="plan", frac=0.1),
-                   dict(mode="dyn", frac=0.2, cap_mult=2.0), dict(mode="plan", frac=0.2)]
+                   dict(mode="plan", frac=0.1, plan_quant=True),
+                   dict(mode="dyn", frac=0.2, cap_mult=2.0), dict(mode="plan", frac=0.2),
+                   dict(mode="plan", frac=0.2, plan_quant=True)]
     else:
         start = 1
         configs = [dict(mode="base"), dict(mode="full", cap_mult=None),
@@ -394,6 +447,7 @@ def bench(a):
     out = []
     for c in configs:
         st.mode, st.frac, st.budget, st.cap_mult, st.deadline = c["mode"], c.get("frac", 0.1), c.get("budget"), c.get("cap_mult", 2.0), c.get("deadline")
+        st.plan_refresh, st.plan_quant = c.get("plan_refresh", 0), c.get("plan_quant", False)
         tot, n, secs, agg = 0.0, 0, 0.0, collections.Counter()
         for w in wins:
             store.cache.clear()                    # every window starts with a cold cache and no plan
@@ -410,6 +464,9 @@ def bench(a):
                  refine_ms_per_token=1000 * agg["t_refine"] / n,
                  cache_hit_rate=(agg["hits"] / agg["wanted"]) if agg["wanted"] else None,
                  served_of_wanted=(agg["served"] / agg["wanted"]) if agg["wanted"] else None)
+        r["plan_resident_mb"] = sum(g.plan_bytes for g in store.groups) / 1e6
+        r["rebuild_ms_per_token"] = 1000 * agg["t_rebuild"] / n
+        r["rebuilds_per_window"] = agg["rebuilds"] / len(wins)
         out.append(r)
         print(json.dumps({k: (round(v, 3) if isinstance(v, float) else v) for k, v in r.items()}), flush=True)
     json.dump(out, open(a.json, "w"), indent=2)
@@ -425,7 +482,8 @@ def main():
     ap.add_argument("--windows", type=int, default=2)
     ap.add_argument("--dtype", default="float32")
     ap.add_argument("--json", default="mlx_bench.json")
-    ap.add_argument("--suite", default="all", choices=["all", "plan"])
+    ap.add_argument("--suite", default="all", choices=["all", "plan", "drift"])
+    ap.add_argument("--drift-at", type=int, default=128)
     ap.add_argument("--plan-len", type=int, default=64)
     a = ap.parse_args()
     if a.cmd == "convert":
