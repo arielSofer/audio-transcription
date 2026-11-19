@@ -1,0 +1,21 @@
+MacBook Pro, 48 GB RAM, internal SSD. mac_ssd_bench.py --size-gb 64 (file larger than RAM, F_NOCACHE).
+Output copied from the run; the shell prompt and the per-user temp path were removed.
+
+platform=darwin  size=64.0 GB  free=195 GB  (page cache bypass: F_NOCACHE)
+wrote 64.0 GB in 8.6s (7430 MB/s sequential write)
+
+cold sequential read (first 2.0 GB, 8 threads): 6566 MB/s; same region again: 8966 MB/s -> no sign of caching, the disk numbers look real
+
+    tile        1T        4T        8T       16T       32T   (MB/s, random tile reads)
+    32KB       318      1155      1980      3391      2879
+   128KB       920      3473      5785      8963     10225
+   512KB      2543      9524     13042     14009     13975
+  2048KB      4817     15156     14080     22546     16974
+
+WARNING: >12000 MB/s -> probably served from the OS cache; use a larger --size-gb.
+
+Notes (added afterwards):
+- An earlier run with the first version of the script reported a 169 MB/s write; that was the
+  random-number generator (os.urandom is slow on macOS), not the disk.
+- Random 512KB/2MB reads at 13-22 GB/s are higher than the cold sequential read (6.6 GB/s) and the
+  sequential write (7.4 GB/s), so they are most likely helped by caching. Plan with ~6.5 GB/s.
