@@ -1,0 +1,20 @@
+gpt-oss-20b (mlx-community/gpt-oss-20b-MXFP4-Q8), 24 MoE layers, 32 experts per layer, top-4, 13.24 MB per expert, 10.17 GB of experts.
+Apple Silicon Mac, 48 GB RAM, MLX on the GPU. Expert file read with F_NOCACHE.
+WikiText-2 test, 2 windows of 256 tokens, token by token, scored from token 64, cache cold in every window.
+Command: MODEL=mlx-community/gpt-oss-20b-MXFP4-Q8 bash progressive-weights/run_moe_on_mac.sh   (commit 2e97fb0)
+The perplexity (160.7) is high because this is a chat/reasoning model fed raw text; the resident model gives the same number.
+
+{"config": "resident (all experts in RAM)", "ppl": 160.7278, "ms_per_token": 13.0646, "tokens_per_s": 76.543}
+{"config": "streamed, cache 0.12 of the experts per layer (24 MoE layers)", "ppl": 160.7278, "ms_per_token": 134.4208, "tokens_per_s": 7.4393, "hit_rate": 0.5178, "experts_read_per_token": 46.2891, "read_mb_per_token": 612.7043, "io_ms_per_token": 74.0153, "router_sync_ms_per_token": 43.4126, "stack_ms_per_token": 0.2577, "make_arrays_ms_per_token": 11.1741, "peak_mem_gb": 4.5239}
+{"config": "streamed, cache 0.25 of the experts per layer (24 MoE layers)", "ppl": 160.7278, "ms_per_token": 84.7205, "tokens_per_s": 11.8035, "hit_rate": 0.729, "experts_read_per_token": 26.0156, "read_mb_per_token": 344.3553, "io_ms_per_token": 36.368, "router_sync_ms_per_token": 36.9423, "stack_ms_per_token": 0.2753, "make_arrays_ms_per_token": 6.2313, "peak_mem_gb": 5.7997}
+{"config": "streamed, cache 0.50 of the experts per layer (24 MoE layers)", "ppl": 160.7278, "ms_per_token": 49.1169, "tokens_per_s": 20.3596, "hit_rate": 0.9206, "experts_read_per_token": 7.625, "read_mb_per_token": 100.9282, "io_ms_per_token": 13.8722, "router_sync_ms_per_token": 28.3233, "stack_ms_per_token": 0.2965, "make_arrays_ms_per_token": 2.0703, "peak_mem_gb": 8.3514}
+{"config": "streamed, cache 1.00 of the experts per layer (24 MoE layers)", "ppl": 160.7278, "ms_per_token": 30.9945, "tokens_per_s": 32.2638, "hit_rate": 0.997, "experts_read_per_token": 0.2917, "read_mb_per_token": 3.8606, "io_ms_per_token": 0.7932, "router_sync_ms_per_token": 24.9204, "stack_ms_per_token": 0.2929, "make_arrays_ms_per_token": 0.2424, "peak_mem_gb": 11.2893}
+
+== EXPERT REUSE between tokens (from the recorded routing)
+2 sequences, 255 tokens per layer in the first, 24 MoE layers, 32 experts per layer, top-4
+ cache C    C/E | LRU hit rate  (after prompt) | prompt-fixed set
+       4   0.12 |        0.513           0.518 |            0.483
+       8   0.25 |        0.714           0.729 |            0.693
+      16   0.50 |        0.904           0.921 |            0.895
+      24   0.75 |        0.964           0.984 |            0.963
+      32   1.00 |        0.975           0.997 |            0.972

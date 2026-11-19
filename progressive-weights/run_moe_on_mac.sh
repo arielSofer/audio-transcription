@@ -44,6 +44,15 @@ else:
 sys.exit(0 if ok else 1)
 PYEOF
 }
+if ! complete || [ ! -s "$EXP.json" ]; then
+  NEED="${NEED_GB:-35}"                                  # the download plus the expert file (about the same size again)
+  FREE="$(df -k "$WORK" | awk 'NR==2 {printf "%d", $4/1048576}')"
+  if [ "$FREE" -lt "$NEED" ]; then
+    echo "!! only ${FREE} GB free in $WORK, this model needs about ${NEED} GB (the download plus the expert file)."
+    echo "   free space (rm -rf the models or experts_*.bin you no longer need under $WORK) or rerun with NEED_GB=<smaller> if part is already on disk."
+    exit 1
+  fi
+fi
 if ! complete; then
   echo "== downloading $MODEL (resumable; this is large, be patient)"
   ok=0
