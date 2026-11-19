@@ -50,11 +50,12 @@ def deq(q, scale, mn, bits: int = 8):
 # --------------------------------------------------------------------------
 class Controller:
     def __init__(self):
-        self.mode = "base"      # base | full | calib | dynamic | static | random | policy
+        self.mode = "base"      # base | full | calib | dynamic | static | random | policy | prevtok | prompt
         self.frac = 0.0         # fraction of tiles refined per token
         self.budget = None      # policy: max NEW tiles fetched per token per group, as a fraction of k (None = unlimited)
         self.cap_mult = None    # policy: cache capacity in units of k (tiles kept resident)
         self.bits = 4
+        self.prompt_len = 64    # 'prompt' mode: tokens before this index are the prompt (prefill)
         self.reset_stats()
 
     def reset_stats(self):
@@ -142,6 +143,17 @@ class TileGroup:
                     self._stat(ctl.overlap, self.kind, ov)
                 if ctl.mode == "policy":
                     mask = self._policy(score, D, k, N)
+                elif ctl.mode == "prevtok":
+                    # decided one token EARLIER: use the set that token t-1 selected (token 0 uses its own)
+                    mask = torch.cat([D[:1], D[:-1]], 0)
+                elif ctl.mode == "prompt":
+                    # decided ONCE from the prompt: tokens >= prompt_len all use the top-k tiles of the mean prompt score
+                    P0 = min(ctl.prompt_len, N)
+                    sel = torch.topk(score[:P0].mean(0), k).indices
+                    fixed = torch.zeros(nt)
+                    fixed[sel] = 1.0
+                    mask = D.clone()                       # prompt tokens themselves: per-token (prefill)
+                    mask[P0:] = fixed
                 else:
                     mask = D
             ctl.refine_bytes += float(mask.sum()) * self.tile_bytes(ctl.bits)
@@ -259,10 +271,11 @@ def set_bits(groups, ctl: Controller, bits: int):
 
 
 @torch.no_grad()
-def nll_of(model, windows):
+def nll_of(model, windows, start=1):
+    """Summed NLL of the tokens at positions >= start (default: every token after the first)."""
     tot, n = 0.0, 0
     for w in windows:
         logits = model(w).logits
-        tot += F.cross_entropy(logits[0, :-1].float(), w[0, 1:], reduction="sum").item()
-        n += w.shape[1] - 1
+        tot += F.cross_entropy(logits[0, start - 1:-1].float(), w[0, start:], reduction="sum").item()
+        n += w.shape[1] - start
     return tot, n
