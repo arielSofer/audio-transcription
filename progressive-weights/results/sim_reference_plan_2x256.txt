@@ -1,0 +1,6 @@
+{"mode": "base", "frac": 0.0, "ppl": 23.547207393038743}
+{"mode": "full", "frac": 0.0, "ppl": 19.04211694260615}
+{"mode": "dynamic", "frac": 0.1, "ppl": 20.50831620275784}
+{"mode": "prompt", "frac": 0.1, "ppl": 20.505470674164293}
+{"mode": "dynamic", "frac": 0.2, "ppl": 20.24017415447872}
+{"mode": "prompt", "frac": 0.2, "ppl": 20.36372886456533}

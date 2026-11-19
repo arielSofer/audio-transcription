@@ -1,0 +1,7 @@
+Real Mac run: python mlx_engine.py bench --suite plan --T 256 --plan-len 64 --dtype float16 (Qwen2.5-0.5B, GPU + SSD).
+2 windows of 256 tokens, tokens 64..255 scored (384 tokens). Shell prompt/paths removed.
+{"config": {"mode": "base"}, "ppl": 23.512, "ms_per_token": 5.114, "tokens_per_s": 195.559, "read_mb_per_token": 0.0}
+{"config": {"mode": "dyn", "frac": 0.1, "cap_mult": 2.0}, "ppl": 20.498, "ms_per_token": 108.785, "tokens_per_s": 9.192, "read_mb_per_token": 5.086, "io_wait_ms_per_token": 14.074, "select_ms_per_token": 28.364, "refine_ms_per_token": 61.036, "cache_hit_rate": 0.568}
+{"config": {"mode": "plan", "frac": 0.1}, "ppl": 20.489, "ms_per_token": 7.809, "tokens_per_s": 128.062, "read_mb_per_token": 0.047, "io_wait_ms_per_token": 0.135, "select_ms_per_token": 0.148, "refine_ms_per_token": 0.318}
+{"config": {"mode": "dyn", "frac": 0.2, "cap_mult": 2.0}, "ppl": 20.223, "ms_per_token": 188.409, "tokens_per_s": 5.308, "read_mb_per_token": 8.572, "io_wait_ms_per_token": 18.992, "select_ms_per_token": 40.525, "refine_ms_per_token": 121.484, "cache_hit_rate": 0.693}
+{"config": {"mode": "plan", "frac": 0.2}, "ppl": 20.336, "ms_per_token": 12.288, "tokens_per_s": 81.38, "read_mb_per_token": 0.076, "io_wait_ms_per_token": 0.208, "select_ms_per_token": 0.215, "refine_ms_per_token": 0.644}

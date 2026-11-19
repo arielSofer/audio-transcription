@@ -20,7 +20,7 @@ model = AutoModelForCausalLM.from_pretrained(a.model, dtype=torch.float32).eval(
 ctl = P.Controller()
 ctl.prompt_len = a.plan_len
 groups = P.convert_model(model, ctl)
-for mode, f in (("base", 0.0), ("dynamic", 0.1), ("prompt", 0.1), ("dynamic", 0.2), ("prompt", 0.2)):
+for mode, f in (("base", 0.0), ("full", 0.0), ("dynamic", 0.1), ("prompt", 0.1), ("dynamic", 0.2), ("prompt", 0.2)):
     ctl.mode, ctl.frac = mode, f
     for g in groups:
         g._x = None
