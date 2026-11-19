@@ -133,11 +133,12 @@ def main():
         region = min(2_000_000_000, size) // 4096 * 4096
         cold = seq_pass(path, region, 8)
         again = seq_pass(path, region, 8)
-        cached = again > 1.5 * cold
-        print(f"\ncold sequential read (first {region/1e9:.0f} GB, 8 threads): {cold:.0f} MB/s; "
+        cached = again > 1.5 * cold or cold > 12000
+        print(f"\ncold sequential read (first {region/1e9:.1f} GB, 8 threads): {cold:.0f} MB/s; "
               f"same region again: {again:.0f} MB/s -> "
-              + ("second pass is much faster: the OS cache IS serving reads, random-read numbers below are inflated"
-                 if cached else "no sign of caching, the disk numbers look real"))
+              + ("the OS cache is probably serving reads (second pass much faster, or the cold pass is "
+                 "implausibly fast): numbers below are inflated" if cached
+                 else "no sign of caching, the disk numbers look real"))
         best = {}
         print(f"\n{'tile':>8} " + " ".join(f"{t:>8}T" for t in threads) + "   (MB/s, random tile reads)")
         stalled = False
