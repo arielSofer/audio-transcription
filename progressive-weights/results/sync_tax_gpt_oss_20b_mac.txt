@@ -1,0 +1,17 @@
+sync_tax.py on gpt-oss-20b (mlx-community/gpt-oss-20b-MXFP4-Q8), the NORMAL resident model, no expert streaming.
+Apple Silicon Mac, 48 GB RAM, MLX GPU. mx.eval() forced after every k-th decoder layer. 79 timed tokens per setting, median ms.
+Command: ~/pw_mac_run/venv/bin/python progressive-weights/sync_tax.py --model <gpt-oss-20b dir> --data <wikitext2_test.parquet>   (commit 8526349)
+
+24 layers, 79 timed tokens per setting (median ms reported)
+{"eval_every": 0, "syncs_per_token": 1, "ms_median": 13.421, "ms_mean": 14.065}
+{"eval_every": 12, "syncs_per_token": 3, "ms_median": 13.383, "ms_mean": 13.535}
+{"eval_every": 6, "syncs_per_token": 5, "ms_median": 13.772, "ms_mean": 13.828}
+{"eval_every": 4, "syncs_per_token": 7, "ms_median": 14.033, "ms_mean": 14.084}
+{"eval_every": 3, "syncs_per_token": 9, "ms_median": 14.391, "ms_mean": 14.405}
+{"eval_every": 2, "syncs_per_token": 13, "ms_median": 15.148, "ms_mean": 15.187}
+{"eval_every": 1, "syncs_per_token": 25, "ms_median": 17.541, "ms_mean": 17.687}
+
+fit: ms_per_token = 12.91 + 0.180 * syncs_per_token   (max residual 0.33 ms)
+normal model 13.42 ms/token; a sync after every layer 17.54 ms/token  (1.31x)
+cost of one sync ~ 0.180 ms  ->  a model with 24 layers pays ~4.3 ms/token for per-layer syncs
+(the streamed engine with every expert cached measured 31.0 ms vs 13.1 resident on this model: a 17.9 ms tax, so the syncs explain about 4.3 ms of it)
